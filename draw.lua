@@ -16,7 +16,6 @@ function draw.world()
     local top   = math.max(1, math.floor((camera.y - cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
     local bottom = math.min(cfg.MAP_ROWS, math.ceil((camera.y + cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
 
-    -- Draw tiles
     for r = top, bottom do
         for c = left, right do
             local tile = map.grid[r][c]
@@ -26,13 +25,14 @@ function draw.world()
                 love.graphics.setColor(cfg.COL_VOID)
                 love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
             else
-                love.graphics.setColor(1, 1, 1)
+                local lightLevel = game.lightmap[r] and game.lightmap[r][c] or 0
+                lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
+                love.graphics.setColor(lightLevel, lightLevel, lightLevel)
                 love.graphics.draw(sprites.floor, tx, ty)
             end
         end
     end
 
-    -- ====== DRAG BUILDING PREVIEW ======
     local rect = ui.getDragRect()
     if rect then
         local tool = ui.getActiveTool()
@@ -54,7 +54,6 @@ function draw.world()
                 end
             end
         end
-        -- Border
         love.graphics.setColor(r, g, b, 0.8)
         love.graphics.setLineWidth(2)
         love.graphics.rectangle("line", (rect.x1-1)*cfg.TILE_SIZE, (rect.y1-1)*cfg.TILE_SIZE,
@@ -62,7 +61,6 @@ function draw.world()
         love.graphics.setLineWidth(1)
     end
 
-    -- ====== SINGLE TILE HOVER (only when no drag rectangle) ======
     local hover = ui.getHoverTile()
     if hover and not ui.getDragRect() then
         local tx = (hover.x-1)*cfg.TILE_SIZE
@@ -84,12 +82,11 @@ function draw.world()
         love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
     end
 
-    -- Comfort lamps
     for _, lamp in ipairs(game.comforts) do
+        love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.lamp, lamp.x - 16, lamp.y - 16)
     end
 
-    -- Entities
     for _, ent in ipairs(game.entities) do
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
@@ -97,7 +94,6 @@ function draw.world()
         love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
     end
 
-    -- Denizens
     for _, den in ipairs(game.denizens) do
         local col = den:getColor()
         love.graphics.setColor(col)

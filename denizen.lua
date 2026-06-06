@@ -1,7 +1,6 @@
 local cfg  = require("config")
 local util = require("util")
 
--- Denizen class (a table with methods)
 local Denizen = {}
 Denizen.__index = Denizen
 
@@ -22,7 +21,6 @@ function Denizen.create(x, y)
 end
 
 function Denizen:update(dt, map)
-    -- Wander AI
     self.wanderTimer = self.wanderTimer + dt
     if self.wanderTimer >= self.nextWander then
         self.wanderTimer = 0
@@ -32,7 +30,6 @@ function Denizen:update(dt, map)
         self.vy = math.sin(angle) * self.profile.speed
     end
 
-    -- Move with simple wall collision
     local newX = self.x + self.vx * dt
     local newY = self.y + self.vy * dt
     local tileX, tileY = map.worldToTile(newX, self.y)
@@ -48,22 +45,18 @@ function Denizen:update(dt, map)
         self.vy = -self.vy * 0.5
     end
 
-    -- Keep inside world
     local half = cfg.TILE_SIZE / 2
     self.x = util.clamp(self.x, half, cfg.WORLD_WIDTH - half)
     self.y = util.clamp(self.y, half, cfg.WORLD_HEIGHT - half)
 end
 
--- Returns true if the denizen should be removed (extreme despair)
 function Denizen:updateDespair(dt, comforts, entities)
-    -- Find closest comfort
     local minDist = math.huge
     for _, lamp in ipairs(comforts) do
         local d = util.distance(self.x, self.y, lamp.x, lamp.y)
         if d < minDist then minDist = d end
     end
 
-    -- Entity despair influence
     local entityDespairAdd = 0
     for _, ent in ipairs(entities) do
         if ent.active then
@@ -74,7 +67,6 @@ function Denizen:updateDespair(dt, comforts, entities)
         end
     end
 
-    -- Apply despair delta
     local delta = cfg.BASE_DESPAIR_RATE * dt
     if minDist < cfg.COMFORT_CLOSE then
         delta = delta + cfg.CLOSE_COMFORT_DELTA * dt
@@ -83,22 +75,12 @@ function Denizen:updateDespair(dt, comforts, entities)
     end
     delta = delta + entityDespairAdd
 
-    self.profile.despair = util.clamp(
-        self.profile.despair + delta, 0, 1
-    )
-
-    -- Check removal thresholds
-    return self.profile.despair >= cfg.DESPAIR_MAX or
-           self.profile.despair <= cfg.DESPAIR_MIN
+    self.profile.despair = util.clamp(self.profile.despair + delta, 0, 1)
+    return self.profile.despair >= cfg.DESPAIR_MAX or self.profile.despair <= cfg.DESPAIR_MIN
 end
 
--- Drawing handled elsewhere, but colour can be requested
 function Denizen:getColor()
-    return util.lerpColor(
-        cfg.DENIZEN_COLOR_LOW,
-        cfg.DENIZEN_COLOR_HIGH,
-        self.profile.despair
-    )
+    return util.lerpColor(cfg.DENIZEN_COLOR_LOW, cfg.DENIZEN_COLOR_HIGH, self.profile.despair)
 end
 
 return Denizen

@@ -58,7 +58,7 @@ local function createDenizenSprite()
     love.graphics.line(16, 22, 22, 30)       -- right leg
     love.graphics.setCanvas()
     return canvas
-end
+end 
 
 local function createLampSprite()
     local canvas = love.graphics.newCanvas(32, 32)
@@ -95,9 +95,33 @@ end
 function sprites.load()
     sprites.floor   = createFloorTile()
     sprites.wall    = createWallTile()
-    sprites.denizen = createDenizenSprite()
     sprites.lamp    = createLampSprite()
     sprites.entity  = createEntitySprite()
+
+     -- Load custom denizen PNG, fallback to procedural if missing
+    local denizenFile = "sprites/denizen.png"
+    if love.filesystem.getInfo(denizenFile) then
+        sprites.denizen = love.graphics.newImage(denizenFile)
+    else
+        -- Fallback: generate stick figure (same as before)
+        sprites.denizen = createDenizenFallback()
+        print("denizen.png not found, using fallback stick figure.")
+    end
+end
+
+local function createDenizenFallback()
+    local canvas = love.graphics.newCanvas(32, 32)
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear()
+    love.graphics.setColor(0.7, 0.8, 0.9)
+    love.graphics.circle("fill", 16, 8, 4)
+    love.graphics.line(16, 12, 16, 22)
+    love.graphics.line(16, 14, 10, 20)
+    love.graphics.line(16, 14, 22, 20)
+    love.graphics.line(16, 22, 10, 30)
+    love.graphics.line(16, 22, 22, 30)
+    love.graphics.setCanvas()
+    return canvas
 end
 
 return sprites
