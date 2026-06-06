@@ -14,18 +14,55 @@ local dragging = false
 
 local activeTool = cfg.TOOL_NONE
 
+-- ====== DRAG BUILDING STATE ======
+local dragBuildStart = nil
+local dragBuildCurrent = nil
+local isDraggingBuild = false
+
+-- ====== HOVER STATE ======
+local hoverTileX, hoverTileY = nil, nil
+
 function ui.getActiveTool()
     return activeTool
 end
 
 function ui.setActiveTool(tool)
     activeTool = tool
+    isDraggingBuild = false
+    dragBuildStart = nil
+    dragBuildCurrent = nil
+    hoverTileX, hoverTileY = nil, nil
+end
+
+-- Returns a rectangle table {x1,y1, x2,y2} if drag building
+function ui.getDragRect()
+    if not isDraggingBuild or not dragBuildStart or not dragBuildCurrent then
+        return nil
+    end
+    local x1 = math.min(dragBuildStart[1], dragBuildCurrent[1])
+    local y1 = math.min(dragBuildStart[2], dragBuildCurrent[2])
+    local x2 = math.max(dragBuildStart[1], dragBuildCurrent[1])
+    local y2 = math.max(dragBuildStart[2], dragBuildCurrent[2])
+    return {x1=x1, y1=y1, x2=x2, y2=y2}
+end
+
+-- Returns {x=tileX, y=tileY} for hovered tile, or nil
+function ui.getHoverTile()
+    if activeTool == cfg.TOOL_NONE or isDraggingBuild then
+        return nil
+    end
+    -- Guard: return nil if coordinates not yet set
+    if not hoverTileX or not hoverTileY then
+        return nil
+    end
+    return {x=hoverTileX, y=hoverTileY}
 end
 
 function ui.mousepressed(mx, my, button)
     if button ~= 1 then return end
 
     if mx >= cfg.GAME_WIDTH then
+        -- UI panel
         for _, btn in ipairs(buttons) do
             if mx >= btn.bx and mx <= btn.bx+btn.bw and
                my >= btn.by and my <= btn.by+btn.bh then
@@ -41,31 +78,17 @@ function ui.mousepressed(mx, my, button)
             end
         end
     else
+        -- Game world
         if activeTool == cfg.TOOL_NONE then
             dragStart = {x = mx, y = my}
             dragging = true
-        else
+        elseif activeTool == cfg.TOOL_BUILD or activeTool == cfg.TOOL_REMOVE then
             local wx, wy = camera.screenToWorld(mx, my)
             local tileX, tileY = map.worldToTile(wx, wy)
-            if activeTool == cfg.TOOL_LAMP then
-                if map.isWalkable(tileX, tileY) then
-                    local px, py = map.tileToWorld(tileX, tileY)
-                    game.addComfort(px, py)
-                end
-            elseif activeTool == cfg.TOOL_ENTITY then
-                if map.isWalkable(tileX, tileY) then
-                    local px, py = map.tileToWorld(tileX, tileY)
-                    game.addEntity(px, py)
-                end
-            elseif activeTool == cfg.TOOL_BUILD then
-                if map.isBuildable(tileX, tileY) then
-                    map.setTile(tileX, tileY, cfg.FLOOR)
-                end
-            elseif activeTool == cfg.TOOL_REMOVE then
-                -- Only remove floor tiles (not the void)
-                if map.grid[tileY] and map.grid[tileY][tileX] == cfg.FLOOR then
-                    map.setTile(tileX, tileY, cfg.VOID)
-                end
+            if tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
+                dragBuildStart = {tileX, tileY}
+                dragBuildCurrent = {tileX, tileY}
+                isDraggingBuild = true
             end
         end
     end
@@ -73,24 +96,86 @@ end
 
 function ui.mousereleased(mx, my, button)
     if button == 1 then
+        if isDraggingBuild then
+            local rect = ui.getDragRect()
+            if rect then
+                local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
+                for x = rect.x1, rect.x2 do
+                    for y = rect.y1, rect.y2 do
+                        if fillType == cfg.FLOOR then
+                            if map.isBuildable(x, y) then
+                                map.setTile(x, y, fillType)
+                            end
+                        else
+                            if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                                map.setTile(x, y, fillType)
+                            end
+                        end
+                    end
+                end
+            end
+            isDraggingBuild = false
+            dragBuildStart = nil
+            dragBuildCurrent = nil
+        else
+            -- Single click for lamp/entity
+            if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
+                local wx, wy = camera.screenToWorld(mx, my)
+                local tileX, tileY = map.worldToTile(wx, wy)
+                if map.isWalkable(tileX, tileY) then
+                    local px, py = map.tileToWorld(tileX, tileY)
+                    if activeTool == cfg.TOOL_LAMP then
+                        game.addComfort(px, py)
+                    elseif activeTool == cfg.TOOL_ENTITY then
+                        game.addEntity(px, py)
+                    end
+                end
+            end
+        end
         dragging = false
         sliderDrag = nil
     end
 end
 
 function ui.mousemoved(mx, my, dx, dy)
+    -- Camera drag
     if dragging and activeTool == cfg.TOOL_NONE and dragStart then
         camera.x = camera.x - dx / camera.zoom
         camera.y = camera.y - dy / camera.zoom
         dragStart.x = mx
         dragStart.y = my
     end
+    -- Slider drag
     if sliderDrag then
         local sld = sliderDrag
         local frac = (mx - sld.sx) / sld.sw
         frac = math.max(0, math.min(1, frac))
         local value = sld.min + frac * (sld.max - sld.min)
         sld.setter(value)
+    end
+    -- Build drag update
+    if isDraggingBuild then
+        local wx, wy = camera.screenToWorld(mx, my)
+        local tileX, tileY = map.worldToTile(wx, wy)
+        if tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
+            dragBuildCurrent = {tileX, tileY}
+        end
+    end
+    -- Hover tile update
+    if not isDraggingBuild and activeTool ~= cfg.TOOL_NONE then
+        if mx < cfg.GAME_WIDTH then
+            local wx, wy = camera.screenToWorld(mx, my)
+            local tx, ty = map.worldToTile(wx, wy)
+            if tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
+                hoverTileX, hoverTileY = tx, ty
+            else
+                hoverTileX, hoverTileY = nil, nil
+            end
+        else
+            hoverTileX, hoverTileY = nil, nil
+        end
+    else
+        hoverTileX, hoverTileY = nil, nil
     end
 end
 
