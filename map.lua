@@ -32,11 +32,13 @@ function map.isWalkable(tileX, tileY)
 end
 
 function map.isBuildable(tileX, tileY)
-    -- Must be in bounds and currently void
+    if not tileX or not tileY then
+        return false
+    end
     if tileX < 1 or tileX > cfg.MAP_COLS or tileY < 1 or tileY > cfg.MAP_ROWS then
         return false
     end
-    return map.grid[tileY][tileX] == cfg.VOID
+    return map.grid[tileY] and map.grid[tileY][tileX] == cfg.VOID
 end
 
 function map.setTile(tileX, tileY, type)

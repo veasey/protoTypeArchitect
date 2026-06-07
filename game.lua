@@ -3,6 +3,7 @@ local map     = require("map")
 local Denizen = require("denizen")
 local Comfort = require("comfort")
 local Entity  = require("entity")
+local effects = require("effects")   -- fade animations
 
 local game = {}
 
@@ -31,8 +32,8 @@ function game.init()
     local wx, wy = map.tileToWorld(cx, cy)
     game.addComfort(wx, wy)
 
+    -- Compute initial lighting so spawn checks work
     game.computeLighting()
-
 end
 
 function game.spawnDenizen()
@@ -58,65 +59,77 @@ function game.addEntity(wx, wy)
     table.insert(game.entities, Entity.create(wx, wy, game.entityTemplate))
 end
 
--- Remove any objects standing on the given tile (called when floor is erased)
 function game.clearTile(tileX, tileY)
     local worldX, worldY = map.tileToWorld(tileX, tileY)
 
-    -- Remove comforts
+    -- Remove comforts with fade
     for i = #game.comforts, 1, -1 do
         local c = game.comforts[i]
         local tx, ty = map.worldToTile(c.x, c.y)
         if tx == tileX and ty == tileY then
+            effects.addObjectFade("lamp", c.x, c.y, 1, 1)
             table.remove(game.comforts, i)
         end
     end
 
-    -- Remove entities
+    -- Remove entities with fade
     for i = #game.entities, 1, -1 do
         local e = game.entities[i]
         local tx, ty = map.worldToTile(e.x, e.y)
         if tx == tileX and ty == tileY then
+            local scale = e.radius / 16
+            effects.addObjectFade("entity", e.x, e.y, scale, scale)
             table.remove(game.entities, i)
         end
     end
 
-    -- Remove denizens
+    -- Remove denizens with fade
     for i = #game.denizens, 1, -1 do
         local d = game.denizens[i]
         local tx, ty = map.worldToTile(d.x, d.y)
         if tx == tileX and ty == tileY then
+            effects.addObjectFade("denizen", d.x, d.y, 1, 1)
             table.remove(game.denizens, i)
         end
     end
 end
 
 function game.update(dt)
+    -- Spawning
     game.spawnTimer = game.spawnTimer + dt
     while game.spawnTimer >= cfg.SPAWN_INTERVAL do
         game.spawnTimer = game.spawnTimer - cfg.SPAWN_INTERVAL
         game.spawnDenizen()
     end
 
+    -- Denizen movement (needs entities for sight/flee)
     for _, den in ipairs(game.denizens) do
         den:update(dt, map, game.entities)
     end
 
+    -- Entity movement (needs denizens for chase and lightmap for light bias)
     for _, ent in ipairs(game.entities) do
         ent:update(dt, map, game.denizens, game.lightmap)
     end
 
+    -- Despair system
     game.aiTimer = game.aiTimer + dt
     while game.aiTimer >= cfg.AI_INTERVAL do
         game.aiTimer = game.aiTimer - cfg.AI_INTERVAL
         for i = #game.denizens, 1, -1 do
             local den = game.denizens[i]
             if den:updateDespair(cfg.AI_INTERVAL, game.comforts, game.entities) then
+                effects.addObjectFade("denizen", den.x, den.y, 1, 1)
                 table.remove(game.denizens, i)
             end
         end
     end
 
+    -- Recalculate lighting (after all movements and possible tile changes)
     game.computeLighting()
+
+    -- Update fade animations
+    effects.update(dt)
 end
 
 function game.computeLighting()
@@ -185,167 +198,97 @@ function game.getEfficiency()
     return math.floor((count / #game.denizens) * 100)
 end
 
--- ========== SAVE / LOAD ==========
+-- ========== SAVE / LOAD (unchanged) ==========
 local SAVE_FILE = "backrooms_save.lua"
 
 function game.save()
-    -- Serialize map grid (2D table -> 1D or string)
     local saveData = {
-        map = {},          -- 2D grid
+        map = {},
         comforts = {},
         entities = {},
         denizens = {},
         entityTemplate = game.entityTemplate,
     }
-
-    -- Map grid
     for r = 1, cfg.MAP_ROWS do
         saveData.map[r] = {}
         for c = 1, cfg.MAP_COLS do
             saveData.map[r][c] = map.grid[r][c]
         end
     end
-
-    -- Comforts (only need positions)
     for _, c in ipairs(game.comforts) do
         table.insert(saveData.comforts, {x = c.x, y = c.y})
     end
-
-    -- Entities (store full parameters and position)
     for _, e in ipairs(game.entities) do
         table.insert(saveData.entities, {
             x = e.x, y = e.y,
-            speed = e.speed,
-            radius = e.radius,
-            despairPerSec = e.despairPerSec,
-            aggression = e.aggression,
-            lightAvoidance = e.lightAvoidance,
-            active = e.active,
+            speed = e.speed, radius = e.radius, despairPerSec = e.despairPerSec,
+            aggression = e.aggression, lightAvoidance = e.lightAvoidance, active = e.active,
         })
     end
-
-    -- Denizens
     for _, d in ipairs(game.denizens) do
         table.insert(saveData.denizens, {
-            x = d.x, y = d.y,
-            vx = d.vx, vy = d.vy,
-            state = d.state,
-            profile = {
-                anxiety = d.profile.anxiety,
-                despair = d.profile.despair,
-                speed = d.profile.speed,
-            },
-            wanderTimer = d.wanderTimer,
-            nextWander = d.nextWander,
+            x = d.x, y = d.y, vx = d.vx, vy = d.vy, state = d.state,
+            profile = { anxiety = d.profile.anxiety, despair = d.profile.despair, speed = d.profile.speed },
+            wanderTimer = d.wanderTimer, nextWander = d.nextWander,
         })
     end
-
-    -- Write to file as a Lua script that returns the table
     local serialized = "return " .. table.show(saveData, "saveData")
     local ok, err = love.filesystem.write(SAVE_FILE, serialized)
-    if ok then
-        print("Game saved.")
-    else
-        print("Save error: " .. tostring(err))
-    end
+    if ok then print("Game saved.") else print("Save error: " .. tostring(err)) end
 end
 
 function game.load()
     local info = love.filesystem.getInfo(SAVE_FILE)
-    if not info then
-        print("No save file found.")
-        return
-    end
-
+    if not info then print("No save file found.") return end
     local chunk, loadErr = love.filesystem.load(SAVE_FILE)
-    if not chunk then
-        print("Load error: " .. tostring(loadErr))
-        return
-    end
-
+    if not chunk then print("Load error: " .. tostring(loadErr)) return end
     local success, saveData = pcall(chunk)
-    if not success then
-        print("Failed to execute save file: " .. tostring(saveData))
-        return
-    end
+    if not success then print("Failed to execute save file: " .. tostring(saveData)) return end
 
-    -- Restore map
     for r = 1, cfg.MAP_ROWS do
         for c = 1, cfg.MAP_COLS do
             map.grid[r][c] = saveData.map[r][c] or cfg.VOID
         end
     end
-
-    -- Restore entity template
     game.entityTemplate = saveData.entityTemplate or game.entityTemplate
-
-    -- Clear existing objects
     game.comforts = {}
     game.entities = {}
     game.denizens = {}
-
-    -- Restore comforts
-    for _, cd in ipairs(saveData.comforts) do
-        game.addComfort(cd.x, cd.y)
-    end
-
-    -- Restore entities
+    for _, cd in ipairs(saveData.comforts) do game.addComfort(cd.x, cd.y) end
     for _, ed in ipairs(saveData.entities) do
         local ent = Entity.create(ed.x, ed.y, {
-            speed = ed.speed,
-            radius = ed.radius,
-            despairPerSec = ed.despairPerSec,
-            aggression = ed.aggression,
-            lightAvoidance = ed.lightAvoidance,
+            speed = ed.speed, radius = ed.radius, despairPerSec = ed.despairPerSec,
+            aggression = ed.aggression, lightAvoidance = ed.lightAvoidance,
         })
         ent.active = ed.active
         table.insert(game.entities, ent)
     end
-
-    -- Restore denizens
     for _, dd in ipairs(saveData.denizens) do
         local den = Denizen.create(dd.x, dd.y)
-        den.vx = dd.vx
-        den.vy = dd.vy
-        den.state = dd.state
-        den.profile.anxiety = dd.profile.anxiety
-        den.profile.despair = dd.profile.despair
+        den.vx = dd.vx; den.vy = dd.vy; den.state = dd.state
+        den.profile.anxiety = dd.profile.anxiety; den.profile.despair = dd.profile.despair
         den.profile.speed = dd.profile.speed
-        den.wanderTimer = dd.wanderTimer
-        den.nextWander = dd.nextWander
+        den.wanderTimer = dd.wanderTimer; den.nextWander = dd.nextWander
         table.insert(game.denizens, den)
     end
-
-    -- Recalculate lighting
     game.computeLighting()
     print("Game loaded.")
 end
 
--- Quick serialization helper: turns a table into a string that can be read back with load()
 function table.show(t, name, indent)
     indent = indent or ""
     local str = "{\n"
     local isArray = true
     for k, v in pairs(t) do
-        if type(k) ~= "number" then
-            isArray = false
-            break
-        end
+        if type(k) ~= "number" then isArray = false break end
     end
     for k, v in pairs(t) do
-        local keyStr
-        if isArray then
-            keyStr = ""
-        else
-            keyStr = "[" .. (type(k) == "string" and string.format("%q", k) or tostring(k)) .. "] = "
-        end
+        local keyStr = isArray and "" or "[" .. (type(k) == "string" and string.format("%q", k) or tostring(k)) .. "] = "
         if type(v) == "table" then
             str = str .. indent .. "  " .. keyStr .. table.show(v, name, indent .. "  ") .. ",\n"
         elseif type(v) == "string" then
             str = str .. indent .. "  " .. keyStr .. string.format("%q", v) .. ",\n"
-        elseif type(v) == "number" then
-            str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
-        elseif type(v) == "boolean" then
+        elseif type(v) == "number" or type(v) == "boolean" then
             str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
         end
     end

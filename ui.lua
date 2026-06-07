@@ -3,6 +3,7 @@ local game   = require("game")
 local camera = require("camera")
 local map    = require("map")
 local sprites = require("sprites")
+local effects = require("effects")   -- fade animations
 
 local ui = {}
 
@@ -34,6 +35,9 @@ end
 
 function ui.getDragRect()
     if not isDraggingBuild or not dragBuildStart or not dragBuildCurrent then
+        return nil
+    end
+    if not dragBuildStart[1] or not dragBuildStart[2] or not dragBuildCurrent[1] or not dragBuildCurrent[2] then
         return nil
     end
     local x1 = math.min(dragBuildStart[1], dragBuildCurrent[1])
@@ -78,7 +82,7 @@ function ui.mousepressed(mx, my, button)
         elseif activeTool == cfg.TOOL_BUILD or activeTool == cfg.TOOL_REMOVE then
             local wx, wy = camera.screenToWorld(mx, my)
             local tileX, tileY = map.worldToTile(wx, wy)
-            if tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
+            if tileX and tileY and tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
                 dragBuildStart = {tileX, tileY}
                 dragBuildCurrent = {tileX, tileY}
                 isDraggingBuild = true
@@ -96,18 +100,21 @@ function ui.mousereleased(mx, my, button)
                 for x = rect.x1, rect.x2 do
                     for y = rect.y1, rect.y2 do
                         if fillType == cfg.FLOOR then
-                            if map.isBuildable(x, y) then
+                            if x and y and map.isBuildable(x, y) then
                                 map.setTile(x, y, fillType)
+                                effects.addTileFadeIn(x, y)
                             end
                         else
-                            if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                            if x and y and map.grid[y] and map.grid[y][x] == cfg.FLOOR then
                                 map.setTile(x, y, fillType)
-                                -- delete any objects on this tile
                                 game.clearTile(x, y)
+                                effects.addTileFadeOut(x, y)
                             end
                         end
                     end
                 end
+                -- IMMEDIATE LIGHTING UPDATE after all tile changes
+                game.computeLighting()
             end
             isDraggingBuild = false
             dragBuildStart = nil
@@ -116,7 +123,7 @@ function ui.mousereleased(mx, my, button)
             if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
                 local wx, wy = camera.screenToWorld(mx, my)
                 local tileX, tileY = map.worldToTile(wx, wy)
-                if map.isWalkable(tileX, tileY) then
+                if tileX and tileY and map.isWalkable(tileX, tileY) then
                     local px, py = map.tileToWorld(tileX, tileY)
                     if activeTool == cfg.TOOL_LAMP then
                         game.addComfort(px, py)
@@ -148,7 +155,7 @@ function ui.mousemoved(mx, my, dx, dy)
     if isDraggingBuild then
         local wx, wy = camera.screenToWorld(mx, my)
         local tileX, tileY = map.worldToTile(wx, wy)
-        if tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
+        if tileX and tileY and tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
             dragBuildCurrent = {tileX, tileY}
         end
     end
@@ -156,7 +163,7 @@ function ui.mousemoved(mx, my, dx, dy)
         if mx < cfg.GAME_WIDTH then
             local wx, wy = camera.screenToWorld(mx, my)
             local tx, ty = map.worldToTile(wx, wy)
-            if tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
+            if tx and ty and tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
                 hoverTileX, hoverTileY = tx, ty
             else
                 hoverTileX, hoverTileY = nil, nil

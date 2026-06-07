@@ -4,6 +4,7 @@ local camera = require("camera")
 local game   = require("game")
 local sprites = require("sprites")
 local ui     = require("ui")
+local effects = require("effects")   -- for fade animations
 
 local draw = {}
 
@@ -16,6 +17,7 @@ function draw.world()
     local top   = math.max(1, math.floor((camera.y - cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
     local bottom = math.min(cfg.MAP_ROWS, math.ceil((camera.y + cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
 
+    -- Draw tiles with lighting
     for r = top, bottom do
         for c = left, right do
             local tile = map.grid[r][c]
@@ -33,6 +35,32 @@ function draw.world()
         end
     end
 
+    -- ====== TILE FADE EFFECTS ======
+    for _, e in ipairs(effects.list) do
+        if e.type == "tile_fade_in" then
+            love.graphics.setColor(0, 0, 0, e.alpha)
+            love.graphics.rectangle("fill", (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE, cfg.TILE_SIZE, cfg.TILE_SIZE)
+        elseif e.type == "tile_fade_out" then
+            love.graphics.setColor(1, 1, 1, e.alpha)
+            love.graphics.draw(sprites.floor, (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE)
+        end
+    end
+
+    -- ====== OBJECT FADE EFFECTS ======
+    for _, e in ipairs(effects.list) do
+        if e.type == "object_fade" then
+            love.graphics.setColor(1, 1, 1, e.alpha)
+            if e.objType == "lamp" then
+                love.graphics.draw(sprites.lamp, e.x - 16, e.y - 16)
+            elseif e.objType == "entity" then
+                love.graphics.draw(sprites.entity, e.x, e.y, 0, e.scaleX, e.scaleY, 16, 16)
+            elseif e.objType == "denizen" then
+                love.graphics.draw(sprites.denizen, e.x - 16, e.y - 16)
+            end
+        end
+    end
+
+    -- ====== DRAG BUILDING PREVIEW ======
     local rect = ui.getDragRect()
     if rect then
         local tool = ui.getActiveTool()
@@ -61,6 +89,7 @@ function draw.world()
         love.graphics.setLineWidth(1)
     end
 
+    -- ====== SINGLE TILE HOVER ======
     local hover = ui.getHoverTile()
     if hover and not ui.getDragRect() then
         local tx = (hover.x-1)*cfg.TILE_SIZE
@@ -82,19 +111,22 @@ function draw.world()
         love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
     end
 
+    -- Comfort lamps
     for _, lamp in ipairs(game.comforts) do
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.lamp, lamp.x - 16, lamp.y - 16)
     end
 
+    -- Entities (scaled by radius)
     for _, ent in ipairs(game.entities) do
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
-
         love.graphics.setColor(1, 1, 1)
-        love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
+        local scale = ent.radius / 16
+        love.graphics.draw(sprites.entity, ent.x, ent.y, 0, scale, scale, 16, 16)
     end
 
+    -- Denizens
     for _, den in ipairs(game.denizens) do
         local col = den:getColor()
         love.graphics.setColor(col)
