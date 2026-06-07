@@ -14,12 +14,10 @@ local dragging = false
 
 local activeTool = cfg.TOOL_NONE
 
--- ====== DRAG BUILDING STATE ======
 local dragBuildStart = nil
 local dragBuildCurrent = nil
 local isDraggingBuild = false
 
--- ====== HOVER STATE ======
 local hoverTileX, hoverTileY = nil, nil
 
 function ui.getActiveTool()
@@ -34,7 +32,6 @@ function ui.setActiveTool(tool)
     hoverTileX, hoverTileY = nil, nil
 end
 
--- Returns a rectangle table {x1,y1, x2,y2} if drag building
 function ui.getDragRect()
     if not isDraggingBuild or not dragBuildStart or not dragBuildCurrent then
         return nil
@@ -46,12 +43,10 @@ function ui.getDragRect()
     return {x1=x1, y1=y1, x2=x2, y2=y2}
 end
 
--- Returns {x=tileX, y=tileY} for hovered tile, or nil
 function ui.getHoverTile()
     if activeTool == cfg.TOOL_NONE or isDraggingBuild then
         return nil
     end
-    -- Guard: return nil if coordinates not yet set
     if not hoverTileX or not hoverTileY then
         return nil
     end
@@ -62,7 +57,6 @@ function ui.mousepressed(mx, my, button)
     if button ~= 1 then return end
 
     if mx >= cfg.GAME_WIDTH then
-        -- UI panel
         for _, btn in ipairs(buttons) do
             if mx >= btn.bx and mx <= btn.bx+btn.bw and
                my >= btn.by and my <= btn.by+btn.bh then
@@ -78,7 +72,6 @@ function ui.mousepressed(mx, my, button)
             end
         end
     else
-        -- Game world
         if activeTool == cfg.TOOL_NONE then
             dragStart = {x = mx, y = my}
             dragging = true
@@ -109,6 +102,8 @@ function ui.mousereleased(mx, my, button)
                         else
                             if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
                                 map.setTile(x, y, fillType)
+                                -- delete any objects on this tile
+                                game.clearTile(x, y)
                             end
                         end
                     end
@@ -118,7 +113,6 @@ function ui.mousereleased(mx, my, button)
             dragBuildStart = nil
             dragBuildCurrent = nil
         else
-            -- Single click for lamp/entity
             if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
                 local wx, wy = camera.screenToWorld(mx, my)
                 local tileX, tileY = map.worldToTile(wx, wy)
@@ -138,14 +132,12 @@ function ui.mousereleased(mx, my, button)
 end
 
 function ui.mousemoved(mx, my, dx, dy)
-    -- Camera drag
     if dragging and activeTool == cfg.TOOL_NONE and dragStart then
         camera.x = camera.x - dx / camera.zoom
         camera.y = camera.y - dy / camera.zoom
         dragStart.x = mx
         dragStart.y = my
     end
-    -- Slider drag
     if sliderDrag then
         local sld = sliderDrag
         local frac = (mx - sld.sx) / sld.sw
@@ -153,7 +145,6 @@ function ui.mousemoved(mx, my, dx, dy)
         local value = sld.min + frac * (sld.max - sld.min)
         sld.setter(value)
     end
-    -- Build drag update
     if isDraggingBuild then
         local wx, wy = camera.screenToWorld(mx, my)
         local tileX, tileY = map.worldToTile(wx, wy)
@@ -161,7 +152,6 @@ function ui.mousemoved(mx, my, dx, dy)
             dragBuildCurrent = {tileX, tileY}
         end
     end
-    -- Hover tile update
     if not isDraggingBuild and activeTool ~= cfg.TOOL_NONE then
         if mx < cfg.GAME_WIDTH then
             local wx, wy = camera.screenToWorld(mx, my)
@@ -206,7 +196,7 @@ function ui.draw(efficiency, denizenCount)
     buttons = {}
     sliders = {}
 
-    local function addButton(text, tool)
+    local function addButton(text, tool, action)
         local bx, by = x, y
         local bw, bh = 100, 24
         local active = (activeTool == tool)
@@ -214,7 +204,7 @@ function ui.draw(efficiency, denizenCount)
         love.graphics.rectangle("fill", bx, by, bw, bh)
         love.graphics.setColor(1, 1, 1)
         love.graphics.print(text, bx+5, by+4)
-        table.insert(buttons, {bx=bx, by=by, bw=bw, bh=bh, action = function() activeTool = tool end})
+        table.insert(buttons, {bx=bx, by=by, bw=bw, bh=bh, action = action or function() activeTool = tool end})
         y = y + 28
     end
 
@@ -225,8 +215,12 @@ function ui.draw(efficiency, denizenCount)
     addButton("Remove", cfg.TOOL_REMOVE)
 
     y = y + 15
+    addButton("Save", nil, function() game.save() end)
+    addButton("Load", nil, function() game.load() end)
+
+    y = y + 15
     love.graphics.print("Entity Editor", x, y)
-    y = y + 20
+    y = y + 35
 
     local function addSlider(label, min, max, getVal, setVal)
         local sx, sy = x, y
@@ -253,6 +247,12 @@ function ui.draw(efficiency, denizenCount)
     addSlider("Despair/s", 0.01, 0.2,
         function() return game.entityTemplate.despairPerSec end,
         function(v) game.entityTemplate.despairPerSec = v end)
+    addSlider("Aggression", 0, 1,
+        function() return game.entityTemplate.aggression end,
+        function(v) game.entityTemplate.aggression = v end)
+    addSlider("Light Avoid", -1, 1,
+        function() return game.entityTemplate.lightAvoidance end,
+        function(v) game.entityTemplate.lightAvoidance = v end)
 
     y = y + 5
     love.graphics.setColor(0.27, 0.27, 0.27)

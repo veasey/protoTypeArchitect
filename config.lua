@@ -1,3 +1,5 @@
+
+
 local config = {}
 
 config.TILE_SIZE = 32
@@ -27,6 +29,7 @@ config.START_ROOM_RADIUS = 2
 -- Spawning / AI
 config.SPAWN_INTERVAL   = 15
 config.AI_INTERVAL      = 0.2
+config.DENIZEN_SPAWN_MIN_LIGHT = 0.3    -- light level required for a spawn tile
 
 config.BASE_DESPAIR_RATE   = 0.02
 config.COMFORT_CLOSE       = 80
@@ -38,10 +41,15 @@ config.DESPAIR_MAX         = 0.95
 config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
 
+config.DENIZEN_SIGHT_RANGE = 200        -- how far a denizen can see an entity (pixels)
+config.HIDING_DESPAIR_MULT  = 0.3       -- factor applied to entity despair when hiding
+
 config.ENTITY_DEFAULTS = {
-    speed    = 60,
-    radius   = 100,
-    despairPerSec = 0.05,
+    speed          = 60,
+    radius         = 100,
+    despairPerSec  = 0.05,
+    aggression     = 0.5,    -- 0 = never chase, 1 = always chase within radius
+    lightAvoidance = 0.0,    -- -1 = flee light, 0 = neutral, +1 = seek light
 }
 
 -- Colours
@@ -55,8 +63,8 @@ config.COL_UI_BG   = {0.17, 0.17, 0.17}
 config.DENIZEN_COLOR_LOW  = {0.53, 0.67, 0.8}
 config.DENIZEN_COLOR_HIGH = {0.8, 0.2, 0.2}
 
--- Lighting – tuned for dramatic falloff
-config.LIGHT_DECAY_PER_TILE = 0.15   -- much faster dimming
-config.LIGHT_MIN_AMBIENT    = 0.05   -- almost black at maximum distance
+-- Lighting
+config.LIGHT_DECAY_PER_TILE = 0.25
+config.LIGHT_MIN_AMBIENT    = 0.03
 
 return config

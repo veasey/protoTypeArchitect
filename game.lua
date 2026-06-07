@@ -11,9 +11,11 @@ game.comforts  = {}
 game.entities  = {}
 
 game.entityTemplate = {
-    speed    = cfg.ENTITY_DEFAULTS.speed,
-    radius   = cfg.ENTITY_DEFAULTS.radius,
-    despairPerSec = cfg.ENTITY_DEFAULTS.despairPerSec,
+    speed          = cfg.ENTITY_DEFAULTS.speed,
+    radius         = cfg.ENTITY_DEFAULTS.radius,
+    despairPerSec  = cfg.ENTITY_DEFAULTS.despairPerSec,
+    aggression     = cfg.ENTITY_DEFAULTS.aggression,
+    lightAvoidance = cfg.ENTITY_DEFAULTS.lightAvoidance,
 }
 
 game.spawnTimer = 0
@@ -28,12 +30,22 @@ function game.init()
     local cy = math.floor(cfg.MAP_ROWS / 2)
     local wx, wy = map.tileToWorld(cx, cy)
     game.addComfort(wx, wy)
+
+    game.computeLighting()
+
 end
 
 function game.spawnDenizen()
     local floors = map.getAllFloorTiles()
-    if #floors == 0 then return end
-    local tile = floors[love.math.random(#floors)]
+    local candidates = {}
+    for _, tile in ipairs(floors) do
+        local light = game.lightmap[tile.y] and game.lightmap[tile.y][tile.x] or 0
+        if light >= cfg.DENIZEN_SPAWN_MIN_LIGHT then
+            table.insert(candidates, tile)
+        end
+    end
+    if #candidates == 0 then return end
+    local tile = candidates[love.math.random(#candidates)]
     local wx, wy = map.tileToWorld(tile.x, tile.y)
     table.insert(game.denizens, Denizen.create(wx, wy))
 end
@@ -46,6 +58,38 @@ function game.addEntity(wx, wy)
     table.insert(game.entities, Entity.create(wx, wy, game.entityTemplate))
 end
 
+-- Remove any objects standing on the given tile (called when floor is erased)
+function game.clearTile(tileX, tileY)
+    local worldX, worldY = map.tileToWorld(tileX, tileY)
+
+    -- Remove comforts
+    for i = #game.comforts, 1, -1 do
+        local c = game.comforts[i]
+        local tx, ty = map.worldToTile(c.x, c.y)
+        if tx == tileX and ty == tileY then
+            table.remove(game.comforts, i)
+        end
+    end
+
+    -- Remove entities
+    for i = #game.entities, 1, -1 do
+        local e = game.entities[i]
+        local tx, ty = map.worldToTile(e.x, e.y)
+        if tx == tileX and ty == tileY then
+            table.remove(game.entities, i)
+        end
+    end
+
+    -- Remove denizens
+    for i = #game.denizens, 1, -1 do
+        local d = game.denizens[i]
+        local tx, ty = map.worldToTile(d.x, d.y)
+        if tx == tileX and ty == tileY then
+            table.remove(game.denizens, i)
+        end
+    end
+end
+
 function game.update(dt)
     game.spawnTimer = game.spawnTimer + dt
     while game.spawnTimer >= cfg.SPAWN_INTERVAL do
@@ -54,11 +98,11 @@ function game.update(dt)
     end
 
     for _, den in ipairs(game.denizens) do
-        den:update(dt, map)
+        den:update(dt, map, game.entities)
     end
 
     for _, ent in ipairs(game.entities) do
-        ent:update(dt, map)
+        ent:update(dt, map, game.denizens, game.lightmap)
     end
 
     game.aiTimer = game.aiTimer + dt
@@ -76,7 +120,6 @@ function game.update(dt)
 end
 
 function game.computeLighting()
-    -- Reset lightmap to 0
     local light = {}
     for r = 1, cfg.MAP_ROWS do
         light[r] = {}
@@ -85,7 +128,6 @@ function game.computeLighting()
         end
     end
 
-    -- Process every lamp independently, keeping the max value
     for _, lamp in ipairs(game.comforts) do
         local startTX, startTY = map.worldToTile(lamp.x, lamp.y)
         if map.isWalkable(startTX, startTY) then
@@ -100,35 +142,30 @@ function game.computeLighting()
                 head = head + 1
                 local curInt = node.intensity
 
-                -- Update this tile with the brighter of the existing value and current lamp
                 if curInt > light[node.y][node.x] then
                     light[node.y][node.x] = curInt
                 end
 
-                -- Stop expanding if intensity too low
-                if curInt <= cfg.LIGHT_MIN_AMBIENT then
-                    goto continue
-                end
-
-                local neighbours = {
-                    {x = node.x - 1, y = node.y},
-                    {x = node.x + 1, y = node.y},
-                    {x = node.x, y = node.y - 1},
-                    {x = node.x, y = node.y + 1},
-                }
-                for _, nb in ipairs(neighbours) do
-                    if map.isWalkable(nb.x, nb.y) then
-                        local key = nb.y * cfg.MAP_COLS + nb.x
-                        if not visited[key] then
-                            visited[key] = true
-                            local newInt = curInt - cfg.LIGHT_DECAY_PER_TILE
-                            if newInt > 0 then
-                                table.insert(queue, {x = nb.x, y = nb.y, intensity = newInt})
+                if curInt > cfg.LIGHT_MIN_AMBIENT then
+                    local neighbours = {
+                        {x = node.x - 1, y = node.y},
+                        {x = node.x + 1, y = node.y},
+                        {x = node.x, y = node.y - 1},
+                        {x = node.x, y = node.y + 1},
+                    }
+                    for _, nb in ipairs(neighbours) do
+                        if map.isWalkable(nb.x, nb.y) then
+                            local key = nb.y * cfg.MAP_COLS + nb.x
+                            if not visited[key] then
+                                visited[key] = true
+                                local newInt = curInt - cfg.LIGHT_DECAY_PER_TILE
+                                if newInt > 0 then
+                                    table.insert(queue, {x = nb.x, y = nb.y, intensity = newInt})
+                                end
                             end
                         end
                     end
                 end
-                ::continue::
             end
         end
     end
@@ -146,6 +183,174 @@ function game.getEfficiency()
         end
     end
     return math.floor((count / #game.denizens) * 100)
+end
+
+-- ========== SAVE / LOAD ==========
+local SAVE_FILE = "backrooms_save.lua"
+
+function game.save()
+    -- Serialize map grid (2D table -> 1D or string)
+    local saveData = {
+        map = {},          -- 2D grid
+        comforts = {},
+        entities = {},
+        denizens = {},
+        entityTemplate = game.entityTemplate,
+    }
+
+    -- Map grid
+    for r = 1, cfg.MAP_ROWS do
+        saveData.map[r] = {}
+        for c = 1, cfg.MAP_COLS do
+            saveData.map[r][c] = map.grid[r][c]
+        end
+    end
+
+    -- Comforts (only need positions)
+    for _, c in ipairs(game.comforts) do
+        table.insert(saveData.comforts, {x = c.x, y = c.y})
+    end
+
+    -- Entities (store full parameters and position)
+    for _, e in ipairs(game.entities) do
+        table.insert(saveData.entities, {
+            x = e.x, y = e.y,
+            speed = e.speed,
+            radius = e.radius,
+            despairPerSec = e.despairPerSec,
+            aggression = e.aggression,
+            lightAvoidance = e.lightAvoidance,
+            active = e.active,
+        })
+    end
+
+    -- Denizens
+    for _, d in ipairs(game.denizens) do
+        table.insert(saveData.denizens, {
+            x = d.x, y = d.y,
+            vx = d.vx, vy = d.vy,
+            state = d.state,
+            profile = {
+                anxiety = d.profile.anxiety,
+                despair = d.profile.despair,
+                speed = d.profile.speed,
+            },
+            wanderTimer = d.wanderTimer,
+            nextWander = d.nextWander,
+        })
+    end
+
+    -- Write to file as a Lua script that returns the table
+    local serialized = "return " .. table.show(saveData, "saveData")
+    local ok, err = love.filesystem.write(SAVE_FILE, serialized)
+    if ok then
+        print("Game saved.")
+    else
+        print("Save error: " .. tostring(err))
+    end
+end
+
+function game.load()
+    local info = love.filesystem.getInfo(SAVE_FILE)
+    if not info then
+        print("No save file found.")
+        return
+    end
+
+    local chunk, loadErr = love.filesystem.load(SAVE_FILE)
+    if not chunk then
+        print("Load error: " .. tostring(loadErr))
+        return
+    end
+
+    local success, saveData = pcall(chunk)
+    if not success then
+        print("Failed to execute save file: " .. tostring(saveData))
+        return
+    end
+
+    -- Restore map
+    for r = 1, cfg.MAP_ROWS do
+        for c = 1, cfg.MAP_COLS do
+            map.grid[r][c] = saveData.map[r][c] or cfg.VOID
+        end
+    end
+
+    -- Restore entity template
+    game.entityTemplate = saveData.entityTemplate or game.entityTemplate
+
+    -- Clear existing objects
+    game.comforts = {}
+    game.entities = {}
+    game.denizens = {}
+
+    -- Restore comforts
+    for _, cd in ipairs(saveData.comforts) do
+        game.addComfort(cd.x, cd.y)
+    end
+
+    -- Restore entities
+    for _, ed in ipairs(saveData.entities) do
+        local ent = Entity.create(ed.x, ed.y, {
+            speed = ed.speed,
+            radius = ed.radius,
+            despairPerSec = ed.despairPerSec,
+            aggression = ed.aggression,
+            lightAvoidance = ed.lightAvoidance,
+        })
+        ent.active = ed.active
+        table.insert(game.entities, ent)
+    end
+
+    -- Restore denizens
+    for _, dd in ipairs(saveData.denizens) do
+        local den = Denizen.create(dd.x, dd.y)
+        den.vx = dd.vx
+        den.vy = dd.vy
+        den.state = dd.state
+        den.profile.anxiety = dd.profile.anxiety
+        den.profile.despair = dd.profile.despair
+        den.profile.speed = dd.profile.speed
+        den.wanderTimer = dd.wanderTimer
+        den.nextWander = dd.nextWander
+        table.insert(game.denizens, den)
+    end
+
+    -- Recalculate lighting
+    game.computeLighting()
+    print("Game loaded.")
+end
+
+-- Quick serialization helper: turns a table into a string that can be read back with load()
+function table.show(t, name, indent)
+    indent = indent or ""
+    local str = "{\n"
+    local isArray = true
+    for k, v in pairs(t) do
+        if type(k) ~= "number" then
+            isArray = false
+            break
+        end
+    end
+    for k, v in pairs(t) do
+        local keyStr
+        if isArray then
+            keyStr = ""
+        else
+            keyStr = "[" .. (type(k) == "string" and string.format("%q", k) or tostring(k)) .. "] = "
+        end
+        if type(v) == "table" then
+            str = str .. indent .. "  " .. keyStr .. table.show(v, name, indent .. "  ") .. ",\n"
+        elseif type(v) == "string" then
+            str = str .. indent .. "  " .. keyStr .. string.format("%q", v) .. ",\n"
+        elseif type(v) == "number" then
+            str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
+        elseif type(v) == "boolean" then
+            str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
+        end
+    end
+    str = str .. indent .. "}"
+    return str
 end
 
 return game

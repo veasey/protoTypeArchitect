@@ -65,12 +65,12 @@ local function createLampSprite()
     love.graphics.setCanvas(canvas)
     love.graphics.clear()
     -- Glowing orb
-    love.graphics.setColor(0.95, 0.9, 0.4, 0.8)
-    love.graphics.circle("fill", 16, 16, 6)
+    love.graphics.setColor(0.95, 0.9, 0.4, 0.5)
+    love.graphics.rectangle("fill", 12, 7, 5, 18)
     -- Soft halo
     for r = 7, 12 do
         love.graphics.setColor(0.95, 0.9, 0.4, 0.1)
-        love.graphics.circle("fill", 16, 16, r)
+        love.graphics.rectangle("fill", 12, 7, 6, 19)
     end
     love.graphics.setCanvas()
     return canvas

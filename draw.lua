@@ -90,6 +90,7 @@ function draw.world()
     for _, ent in ipairs(game.entities) do
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
+
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
     end

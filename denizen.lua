@@ -10,6 +10,7 @@ function Denizen.create(x, y)
     self.y = y
     self.vx = 0
     self.vy = 0
+    self.state = "wandering"   -- "wandering", "hiding", "fleeing"
     self.profile = {
         anxiety = love.math.random() * 0.5 + 0.3,
         despair = 0.3 + love.math.random() * 0.3,
@@ -20,14 +21,58 @@ function Denizen.create(x, y)
     return self
 end
 
-function Denizen:update(dt, map)
-    self.wanderTimer = self.wanderTimer + dt
-    if self.wanderTimer >= self.nextWander then
-        self.wanderTimer = 0
-        self.nextWander = 1.0 + love.math.random() * 1.5
-        local angle = love.math.random() * math.pi * 2
-        self.vx = math.cos(angle) * self.profile.speed
-        self.vy = math.sin(angle) * self.profile.speed
+function Denizen:update(dt, map, entities)
+    -- Determine state based on visible entities
+    local closestChaser = nil
+    local closestChaseDist = math.huge
+    local anyEntitySeen = false
+    for _, ent in ipairs(entities) do
+        if ent.active then
+            local dist = util.distance(self.x, self.y, ent.x, ent.y)
+            if dist <= cfg.DENIZEN_SIGHT_RANGE then
+                anyEntitySeen = true
+                -- Is this entity chasing? (aggression > 0 and within chase radius)
+                local chaseRadius = ent.radius * ent.aggression
+                if ent.aggression > 0 and dist <= chaseRadius then
+                    if dist < closestChaseDist then
+                        closestChaser = ent
+                        closestChaseDist = dist
+                    end
+                end
+            end
+        end
+    end
+
+    -- State transition
+    if closestChaser then
+        self.state = "fleeing"
+        -- Flee direction: away from chasing entity
+        local dx = self.x - closestChaser.x
+        local dy = self.y - closestChaser.y
+        local len = math.sqrt(dx*dx + dy*dy)
+        if len > 0 then
+            dx, dy = dx / len, dy / len
+        end
+        self.vx = dx * self.profile.speed * 1.5   -- flee faster
+        self.vy = dy * self.profile.speed * 1.5
+    elseif anyEntitySeen then
+        self.state = "hiding"
+        self.vx = 0
+        self.vy = 0
+    else
+        self.state = "wandering"
+    end
+
+    -- Movement
+    if self.state == "wandering" then
+        self.wanderTimer = self.wanderTimer + dt
+        if self.wanderTimer >= self.nextWander then
+            self.wanderTimer = 0
+            self.nextWander = 1.0 + love.math.random() * 1.5
+            local angle = love.math.random() * math.pi * 2
+            self.vx = math.cos(angle) * self.profile.speed
+            self.vy = math.sin(angle) * self.profile.speed
+        end
     end
 
     local newX = self.x + self.vx * dt
@@ -65,6 +110,11 @@ function Denizen:updateDespair(dt, comforts, entities)
                 entityDespairAdd = entityDespairAdd + ent.despairPerSec * dt
             end
         end
+    end
+
+    -- Reduce entity despair if currently hiding
+    if self.state == "hiding" then
+        entityDespairAdd = entityDespairAdd * cfg.HIDING_DESPAIR_MULT
     end
 
     local delta = cfg.BASE_DESPAIR_RATE * dt
