@@ -4,7 +4,7 @@ local camera = require("camera")
 local game   = require("game")
 local sprites = require("sprites")
 local ui     = require("ui")
-local effects = require("effects")   -- for fade animations
+local effects = require("effects")
 
 local draw = {}
 
@@ -17,7 +17,7 @@ function draw.world()
     local top   = math.max(1, math.floor((camera.y - cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
     local bottom = math.min(cfg.MAP_ROWS, math.ceil((camera.y + cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
 
-    -- Draw tiles with lighting
+    -- Draw tiles with lighting, but skip tiles that are currently fading in
     for r = top, bottom do
         for c = left, right do
             local tile = map.grid[r][c]
@@ -27,10 +27,14 @@ function draw.world()
                 love.graphics.setColor(cfg.COL_VOID)
                 love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
             else
-                local lightLevel = game.lightmap[r] and game.lightmap[r][c] or 0
-                lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
-                love.graphics.setColor(lightLevel, lightLevel, lightLevel)
-                love.graphics.draw(sprites.floor, tx, ty)
+                -- If this tile is being faded in, don't draw it yet;
+                -- the fade effect will handle its appearance gradually.
+                if not effects.isTileFadingIn(c, r) then
+                    local lightLevel = game.lightmap[r] and game.lightmap[r][c] or 0
+                    lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
+                    love.graphics.setColor(lightLevel, lightLevel, lightLevel)
+                    love.graphics.draw(sprites.floor, tx, ty)
+                end
             end
         end
     end
@@ -38,10 +42,15 @@ function draw.world()
     -- ====== TILE FADE EFFECTS ======
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" then
-            love.graphics.setColor(0, 0, 0, e.alpha)
-            love.graphics.rectangle("fill", (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE, cfg.TILE_SIZE, cfg.TILE_SIZE)
+            -- Tile fades in: draw the lit floor with increasing opacity
+            local lightLevel = game.lightmap[e.tileY] and game.lightmap[e.tileY][e.tileX] or 0
+            lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
+            love.graphics.setColor(lightLevel, lightLevel, lightLevel, 1 - e.alpha)
+            love.graphics.draw(sprites.floor, (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE)
         elseif e.type == "tile_fade_out" then
-            love.graphics.setColor(1, 1, 1, e.alpha)
+            -- Tile fades out: draw the floor sprite with captured light, fading away
+            local light = e.lightLevel or 1
+            love.graphics.setColor(light, light, light, e.alpha)
             love.graphics.draw(sprites.floor, (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE)
         end
     end
@@ -53,14 +62,14 @@ function draw.world()
             if e.objType == "lamp" then
                 love.graphics.draw(sprites.lamp, e.x - 16, e.y - 16)
             elseif e.objType == "entity" then
-                love.graphics.draw(sprites.entity, e.x, e.y, 0, e.scaleX, e.scaleY, 16, 16)
+                love.graphics.draw(sprites.entity, e.x - 16, e.y - 16)
             elseif e.objType == "denizen" then
                 love.graphics.draw(sprites.denizen, e.x - 16, e.y - 16)
             end
         end
     end
 
-    -- ====== DRAG BUILDING PREVIEW ======
+    -- ====== DRAG BUILDING PREVIEW (unchanged) ======
     local rect = ui.getDragRect()
     if rect then
         local tool = ui.getActiveTool()
@@ -117,13 +126,15 @@ function draw.world()
         love.graphics.draw(sprites.lamp, lamp.x - 16, lamp.y - 16)
     end
 
-    -- Entities (scaled by radius)
+    -- Entities (fixed sprite size, radius shown only by circle)
     for _, ent in ipairs(game.entities) do
+        -- Red circle showing despair radius
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
+
+        -- Sprite at constant size, centered
         love.graphics.setColor(1, 1, 1)
-        local scale = ent.radius / 16
-        love.graphics.draw(sprites.entity, ent.x, ent.y, 0, scale, scale, 16, 16)
+        love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
     end
 
     -- Denizens

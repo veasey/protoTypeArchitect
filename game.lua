@@ -3,7 +3,8 @@ local map     = require("map")
 local Denizen = require("denizen")
 local Comfort = require("comfort")
 local Entity  = require("entity")
-local effects = require("effects")   -- fade animations
+local effects = require("effects")
+local audio   = require("audio")
 
 local game = {}
 
@@ -31,6 +32,7 @@ function game.init()
     local cy = math.floor(cfg.MAP_ROWS / 2)
     local wx, wy = map.tileToWorld(cx, cy)
     game.addComfort(wx, wy)
+    audio.addLampLoop(game.comforts[#game.comforts])
 
     -- Compute initial lighting so spawn checks work
     game.computeLighting()
@@ -53,6 +55,7 @@ end
 
 function game.addComfort(wx, wy)
     table.insert(game.comforts, Comfort.create(wx, wy))
+    audio.addLampLoop(game.comforts[#game.comforts])
 end
 
 function game.addEntity(wx, wy)
@@ -69,6 +72,7 @@ function game.clearTile(tileX, tileY)
         if tx == tileX and ty == tileY then
             effects.addObjectFade("lamp", c.x, c.y, 1, 1)
             table.remove(game.comforts, i)
+            audio.removeLampLoop(c)
         end
     end
 
@@ -78,7 +82,7 @@ function game.clearTile(tileX, tileY)
         local tx, ty = map.worldToTile(e.x, e.y)
         if tx == tileX and ty == tileY then
             local scale = e.radius / 16
-            effects.addObjectFade("entity", e.x, e.y, scale, scale)
+            effects.addObjectFade("entity", e.x, e.y, 1, 1)
             table.remove(game.entities, i)
         end
     end
@@ -130,6 +134,18 @@ function game.update(dt)
 
     -- Update fade animations
     effects.update(dt)
+
+    -- If no tile fade effects remain, stop the building sound
+    local hasTileFade = false
+    for _, e in ipairs(effects.list) do
+        if e.type == "tile_fade_in" or e.type == "tile_fade_out" then
+            hasTileFade = true
+            break
+        end
+    end
+    if not hasTileFade then
+        audio.stopBuildSound()
+    end
 end
 
 function game.computeLighting()

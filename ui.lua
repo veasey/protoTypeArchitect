@@ -3,7 +3,8 @@ local game   = require("game")
 local camera = require("camera")
 local map    = require("map")
 local sprites = require("sprites")
-local effects = require("effects")   -- fade animations
+local effects = require("effects")
+local audio   = require("audio")
 
 local ui = {}
 
@@ -97,24 +98,45 @@ function ui.mousereleased(mx, my, button)
             local rect = ui.getDragRect()
             if rect then
                 local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
+
+                -- Calculate drag direction for delay computation
+                local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
+                local endTX, endTY = dragBuildCurrent[1], dragBuildCurrent[2]
+                local dirX = endTX - startTX
+                local dirY = endTY - startTY
+                local maxDist = math.sqrt(dirX*dirX + dirY*dirY)
+                if maxDist == 0 then maxDist = 1 end   -- single tile click
+
+                local maxDelay = 0.4   -- total sweep time in seconds
+                local tileList = {}
                 for x = rect.x1, rect.x2 do
                     for y = rect.y1, rect.y2 do
                         if fillType == cfg.FLOOR then
-                            if x and y and map.isBuildable(x, y) then
+                            if map.isBuildable(x, y) then
                                 map.setTile(x, y, fillType)
-                                effects.addTileFadeIn(x, y)
+                                -- compute delay based on projection along drag vector
+                                local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                                local delay = (proj + 0.5) * maxDelay   -- shift so center of rect starts at 0 delay
+                                delay = math.max(0, math.min(delay, maxDelay))
+                                effects.addTileFadeIn(x, y, delay)
                             end
                         else
-                            if x and y and map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                            if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                                -- capture light level before removal
+                                local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
                                 map.setTile(x, y, fillType)
                                 game.clearTile(x, y)
-                                effects.addTileFadeOut(x, y)
+                                local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                                local delay = (proj + 0.5) * maxDelay
+                                delay = math.max(0, math.min(delay, maxDelay))
+                                effects.addTileFadeOut(x, y, lightLevel, delay)
                             end
                         end
                     end
                 end
-                -- IMMEDIATE LIGHTING UPDATE after all tile changes
+
                 game.computeLighting()
+                audio.playBuildSound()
             end
             isDraggingBuild = false
             dragBuildStart = nil
@@ -127,8 +149,10 @@ function ui.mousereleased(mx, my, button)
                     local px, py = map.tileToWorld(tileX, tileY)
                     if activeTool == cfg.TOOL_LAMP then
                         game.addComfort(px, py)
+                        audio.playLampPlaceSound()
                     elseif activeTool == cfg.TOOL_ENTITY then
                         game.addEntity(px, py)
+                        audio.playEntityPlaceSound()
                     end
                 end
             end

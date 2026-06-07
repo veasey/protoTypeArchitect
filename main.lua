@@ -3,33 +3,33 @@ local game    = require("game")
 local draw    = require("draw")
 local ui      = require("ui")
 local camera  = require("camera")
-local sprites = require("sprites") 
-local postfx  = require("postfx")   
+local sprites = require("sprites")
+local postfx  = require("postfx")
+local audio   = require("audio")
+
+-- Audio
+local buildSound
 
 function love.load()
     love.window.setMode(cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT, {resizable = false})
     love.math.setRandomSeed(os.time())
-    sprites.load()  -- generate textures
-    postfx.load()   -- initialise the CRT shader
+    sprites.load()
+    postfx.load()
+    audio.load()
+
     game.init()
 end
 
 function love.update(dt)
     game.update(dt)
+    audio.updateLampLoops(camera.x, camera.y, camera.zoom, cfg.GAME_WIDTH, cfg.WINDOW_HEIGHT)
 end
 
 function love.draw()
-    -- Capture everything into a canvas
     postfx.beginCapture()
-
-    -- Draw the game world
     draw.world()
-    -- Draw the UI on top (now it will also get the CRT treatment)
     ui.draw(game.getEfficiency(), #game.denizens)
-
     postfx.endCapture()
-
-    -- Now draw the captured canvas through the shader
     postfx.apply(love.timer.getDelta())
 end
 
@@ -47,4 +47,18 @@ end
 
 function love.wheelmoved(x, y)
     ui.wheelmoved(x, y)
+end
+
+-- Expose for other modules
+function playBuildSound()
+    if buildSound then
+        buildSound:stop()
+        buildSound:play()
+    end
+end
+
+function stopBuildSound()
+    if buildSound then
+        buildSound:stop()
+    end
 end
