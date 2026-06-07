@@ -239,6 +239,41 @@ function ui.draw(efficiency, denizenCount)
         y = y + 28
     end
 
+        -- Tooltip for hovered object
+    local hovered = game.hoveredObject
+    if hovered then
+        y = y + 10
+        love.graphics.setColor(1, 1, 1, 0.9)
+        if hovered.type == "entity" then
+            local e = hovered.data
+            love.graphics.print("Entity", x, y)
+            y = y + 16
+            love.graphics.print(string.format("Speed: %.0f", e.speed), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Radius: %.0f", e.radius), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Despair/s: %.2f", e.despairPerSec), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Aggression: %.2f", e.aggression), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Light Avoid: %.2f", e.lightAvoidance), x, y)
+            y = y + 16
+        elseif hovered.type == "denizen" then
+            local d = hovered.data
+            love.graphics.print("Denizen", x, y)
+            y = y + 16
+            love.graphics.print(string.format("State: %s", d.state), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Despair: %.2f", d.profile.despair), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Anxiety: %.2f", d.profile.anxiety), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Speed: %.0f", d.profile.speed), x, y)
+            y = y + 16
+        end
+        y = y + 5
+    end
+
     addButton("None", cfg.TOOL_NONE)
     addButton("Lamp", cfg.TOOL_LAMP)
     addButton("Entity", cfg.TOOL_ENTITY)

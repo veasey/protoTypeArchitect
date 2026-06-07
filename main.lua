@@ -22,7 +22,12 @@ end
 
 function love.update(dt)
     game.update(dt)
+    
     audio.updateLampLoops(camera.x, camera.y, camera.zoom, cfg.GAME_WIDTH, cfg.WINDOW_HEIGHT)
+
+    -- Update hovered object (for tooltips)
+    local mx, my = love.mouse.getPosition()
+    game.hoveredObject = game.getHoveredObject(mx, my, camera)
 end
 
 function love.draw()

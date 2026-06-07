@@ -142,6 +142,16 @@ function draw.world()
         local col = den:getColor()
         love.graphics.setColor(col)
         love.graphics.draw(sprites.denizen, den.x - 16, den.y - 16)
+
+        if den.state == "hiding" then
+            -- Draw a small yellow exclamation mark above the denizen
+            love.graphics.setColor(1, 0.9, 0, 1)
+            love.graphics.circle("fill", den.x, den.y - 18, 3)
+            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.print("!", den.x - 4, den.y - 26)
+            love.graphics.setColor(1, 1, 1, 1)  -- reset
+        end
+
         love.graphics.setColor(1, 1, 1)
     end
 

@@ -5,6 +5,7 @@ local Comfort = require("comfort")
 local Entity  = require("entity")
 local effects = require("effects")
 local audio   = require("audio")
+local camera  = require("camera")
 
 local game = {}
 
@@ -310,6 +311,37 @@ function table.show(t, name, indent)
     end
     str = str .. indent .. "}"
     return str
+end
+
+-- Returns the entity or denizen closest to the mouse cursor, if within 24px.
+-- Call this once per frame from draw or update.
+function game.getHoveredObject(mx, my, camera)
+    -- Convert mouse screen coords to world coords
+    local wx, wy = camera.screenToWorld(mx, my)
+    local bestDist = 24  -- pixel radius to pick an object
+    local bestObj = nil
+
+    -- Check entities
+    for _, ent in ipairs(game.entities) do
+        local dx, dy = ent.x - wx, ent.y - wy
+        local dist = math.sqrt(dx*dx + dy*dy)
+        if dist < bestDist then
+            bestDist = dist
+            bestObj = { type = "entity", data = ent }
+        end
+    end
+
+    -- Check denizens
+    for _, den in ipairs(game.denizens) do
+        local dx, dy = den.x - wx, den.y - wy
+        local dist = math.sqrt(dx*dx + dy*dy)
+        if dist < bestDist then
+            bestDist = dist
+            bestObj = { type = "denizen", data = den }
+        end
+    end
+
+    return bestObj
 end
 
 return game
