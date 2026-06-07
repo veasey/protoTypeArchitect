@@ -26,10 +26,22 @@ config.TOOL_REMOVE = "remove"
 
 config.START_ROOM_RADIUS = 2
 
+-- ===== DENIZEN BEHAVIOR CONFIG =====
+
 -- Spawning / AI
 config.SPAWN_INTERVAL   = 15
 config.AI_INTERVAL      = 0.2
+
 config.DENIZEN_SPAWN_MIN_LIGHT = 0.3    -- light level required for a spawn tile
+config.HIDING_DURATION = 1.5            -- seconds before a denizen gives up hiding
+config.HIDE_COOLDOWN_DURATION = 5       -- seconds before a denizen can hide again
+config.HIDING_DESPAIR_MULT     = 0.3   -- despair multiplier while hiding
+
+-- Denizen avoidance: they avoid entity despair zones when their despair is high
+config.DENIZEN_SIGHT_RANGE = 100
+config.AVOID_DESPAIR_THRESHOLD = 0.5   -- above this despair, start avoiding
+config.AVOID_LOOK_AHEAD = 1.0          -- seconds of movement to check ahead
+config.AVOID_STRENGTH = 2.0            -- rotation force per entity (radians)
 
 config.BASE_DESPAIR_RATE   = 0.02
 config.COMFORT_CLOSE       = 80
@@ -41,15 +53,13 @@ config.DESPAIR_MAX         = 0.95
 config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
 
-config.DENIZEN_SIGHT_RANGE = 200        -- how far a denizen can see an entity (pixels)
-config.HIDING_DESPAIR_MULT  = 0.3       -- factor applied to entity despair when hiding
-
 config.ENTITY_DEFAULTS = {
-    speed          = 60,
+    speed          = 50,
     radius         = 100,
     despairPerSec  = 0.05,
-    aggression     = 0.5,    -- 0 = never chase, 1 = always chase within radius
-    lightAvoidance = 0.0,    -- -1 = flee light, 0 = neutral, +1 = seek light
+    aggression     = 1,    -- 0 = never chase, 1 = always chase within radius
+    lightAvoidance = -1,    -- -1 = flee light, 0 = neutral, +1 = seek light
+    hearingRange   = 300,    -- per-entity hearing range (pixels)
 }
 
 -- Colours

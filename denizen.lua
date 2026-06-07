@@ -1,5 +1,6 @@
 local cfg  = require("config")
 local util = require("util")
+local map  = require("map")   -- needed for line-of-sight
 
 local Denizen = {}
 Denizen.__index = Denizen
@@ -10,7 +11,8 @@ function Denizen.create(x, y)
     self.y = y
     self.vx = 0
     self.vy = 0
-    self.state = "wandering"   -- "wandering", "hiding", "fleeing"
+    self.state = "wandering"
+    self.previousState = "wandering"
     self.profile = {
         anxiety = love.math.random() * 0.5 + 0.3,
         despair = 0.3 + love.math.random() * 0.3,
@@ -18,49 +20,83 @@ function Denizen.create(x, y)
     }
     self.wanderTimer = 0
     self.nextWander  = 1.5
+    self.hidingTimer = 0
+    self.hideCooldown = 0
     return self
 end
 
-function Denizen:update(dt, map, entities)
-    -- Determine state based on visible entities
+function Denizen:update(dt, mapObj, entities, lightmap)
+    -- Reduce hide cooldown
+    self.hideCooldown = math.max(0, self.hideCooldown - dt)
+
+    -- Get light level at denizen's tile
+    local tileX, tileY = mapObj.worldToTile(self.x, self.y)
+    local lightLevel = lightmap[tileY] and lightmap[tileY][tileX] or 0
+    lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
+    local effectiveSight = cfg.DENIZEN_SIGHT_RANGE * lightLevel
+
+    -- Scan entities (with line-of-sight)
     local closestChaser = nil
     local closestChaseDist = math.huge
     local anyEntitySeen = false
+
     for _, ent in ipairs(entities) do
         if ent.active then
             local dist = util.distance(self.x, self.y, ent.x, ent.y)
-            if dist <= cfg.DENIZEN_SIGHT_RANGE then
-                anyEntitySeen = true
-                -- Is this entity chasing? (aggression > 0 and within chase radius)
-                local chaseRadius = ent.radius * ent.aggression
-                if ent.aggression > 0 and dist <= chaseRadius then
-                    if dist < closestChaseDist then
-                        closestChaser = ent
-                        closestChaseDist = dist
+            if dist <= effectiveSight then
+                if util.hasLineOfSight(mapObj, self.x, self.y, ent.x, ent.y) then
+                    anyEntitySeen = true
+                    local chaseRadius = ent.radius * ent.aggression
+                    if ent.aggression > 0 and dist <= chaseRadius then
+                        if dist < closestChaseDist then
+                            closestChaser = ent
+                            closestChaseDist = dist
+                        end
                     end
                 end
             end
         end
     end
 
-    -- State transition
+    -- Remember previous state
+    self.previousState = self.state
+
+    -- State transitions
     if closestChaser then
         self.state = "fleeing"
-        -- Flee direction: away from chasing entity
-        local dx = self.x - closestChaser.x
-        local dy = self.y - closestChaser.y
-        local len = math.sqrt(dx*dx + dy*dy)
-        if len > 0 then
-            dx, dy = dx / len, dy / len
+        self.hidingTimer = 0
+        -- Use pathfinding to flee away from chaser (avoidTarget = true)
+        local fleeDx, fleeDy = util.getPathDirection(mapObj, self.x, self.y, closestChaser.x, closestChaser.y, true)
+        if fleeDx then
+            self.vx = fleeDx * self.profile.speed * 1.5
+            self.vy = fleeDy * self.profile.speed * 1.5
+        else
+            -- fallback to direct away (may hit wall, but better than nothing)
+            local dx = self.x - closestChaser.x
+            local dy = self.y - closestChaser.y
+            local len = math.sqrt(dx*dx + dy*dy)
+            if len > 0 then
+                dx, dy = dx / len, dy / len
+            end
+            self.vx = dx * self.profile.speed * 1.5
+            self.vy = dy * self.profile.speed * 1.5
         end
-        self.vx = dx * self.profile.speed * 1.5   -- flee faster
-        self.vy = dy * self.profile.speed * 1.5
-    elseif anyEntitySeen then
+    elseif anyEntitySeen and self.hideCooldown <= 0 then
         self.state = "hiding"
         self.vx = 0
         self.vy = 0
+        self.hidingTimer = self.hidingTimer + dt
+        if self.hidingTimer >= cfg.HIDING_DURATION then
+            self.state = "wandering"
+            self.hidingTimer = 0
+            self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+        end
     else
         self.state = "wandering"
+        self.hidingTimer = 0
+        if self.previousState == "hiding" then
+            self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+        end
     end
 
     -- Movement
@@ -69,22 +105,73 @@ function Denizen:update(dt, map, entities)
         if self.wanderTimer >= self.nextWander then
             self.wanderTimer = 0
             self.nextWander = 1.0 + love.math.random() * 1.5
+
+            -- Base random angle
             local angle = love.math.random() * math.pi * 2
+
+            -- Avoidance: if denizen is stressed, bias away from high-despair zones
+            if self.profile.despair >= cfg.AVOID_DESPAIR_THRESHOLD then
+                -- Project forward a short distance
+                local lookDist = self.profile.speed * cfg.AVOID_LOOK_AHEAD
+                local probeX = self.x + math.cos(angle) * lookDist
+                local probeY = self.y + math.sin(angle) * lookDist
+
+                local avoidanceAngle = 0
+                local avoidanceWeight = 0
+
+                for _, ent in ipairs(entities) do
+                    if ent.active then
+                        local distToProbe = util.distance(probeX, probeY, ent.x, ent.y)
+                        if distToProbe <= ent.radius then
+                            -- How much despair would we take? (approx)
+                            local intensity = ent.despairPerSec
+                            -- Weight by how much we are over threshold
+                            local over = self.profile.despair - cfg.AVOID_DESPAIR_THRESHOLD
+                            local weight = over * intensity * cfg.AVOID_STRENGTH
+                            -- Direction from entity to probe (we want to steer away)
+                            local dx = probeX - ent.x
+                            local dy = probeY - ent.y
+                            local len = math.sqrt(dx*dx + dy*dy)
+                            if len > 0 then
+                                dx, dy = dx / len, dy / len
+                            end
+                            avoidanceAngle = avoidanceAngle + math.atan2(dy, dx) * weight
+                            avoidanceWeight = avoidanceWeight + weight
+                        end
+                    end
+                end
+
+                if avoidanceWeight > 0 then
+                    -- Blend: rotate base angle towards avoidance direction
+                    local avoidDir = avoidanceAngle / avoidanceWeight
+                    -- Mix base angle with avoidDir (strong avoidance)
+                    local mix = math.min(1, avoidanceWeight)
+                    local targetAngle = avoidDir + math.pi  -- opposite direction
+                    -- Interpolate between base angle and target angle
+                    angle = angle + math.atan2(math.sin(targetAngle - angle), math.cos(targetAngle - angle)) * mix
+                end
+            end
+
             self.vx = math.cos(angle) * self.profile.speed
             self.vy = math.sin(angle) * self.profile.speed
         end
+    elseif self.state == "fleeing" then
+        -- velocity already set
+    elseif self.state == "hiding" then
+        -- velocity is zero
     end
 
+    -- Move with collision
     local newX = self.x + self.vx * dt
     local newY = self.y + self.vy * dt
-    local tileX, tileY = map.worldToTile(newX, self.y)
-    if map.isWalkable(tileX, tileY) then
+    local tx, ty = mapObj.worldToTile(newX, self.y)
+    if mapObj.isWalkable(tx, ty) then
         self.x = newX
     else
         self.vx = -self.vx * 0.5
     end
-    tileX, tileY = map.worldToTile(self.x, newY)
-    if map.isWalkable(tileX, tileY) then
+    tx, ty = mapObj.worldToTile(self.x, newY)
+    if mapObj.isWalkable(tx, ty) then
         self.y = newY
     else
         self.vy = -self.vy * 0.5
@@ -112,7 +199,6 @@ function Denizen:updateDespair(dt, comforts, entities)
         end
     end
 
-    -- Reduce entity despair if currently hiding
     if self.state == "hiding" then
         entityDespairAdd = entityDespairAdd * cfg.HIDING_DESPAIR_MULT
     end

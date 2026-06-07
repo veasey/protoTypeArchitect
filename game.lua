@@ -19,6 +19,7 @@ game.entityTemplate = {
     despairPerSec  = cfg.ENTITY_DEFAULTS.despairPerSec,
     aggression     = cfg.ENTITY_DEFAULTS.aggression,
     lightAvoidance = cfg.ENTITY_DEFAULTS.lightAvoidance,
+    hearingRange   = cfg.ENTITY_DEFAULTS.hearingRange,
 }
 
 game.spawnTimer = 0
@@ -109,7 +110,7 @@ function game.update(dt)
 
     -- Denizen movement (needs entities for sight/flee)
     for _, den in ipairs(game.denizens) do
-        den:update(dt, map, game.entities)
+        den:update(dt, map, game.entities, game.lightmap)
     end
 
     -- Entity movement (needs denizens for chase and lightmap for light bias)
@@ -239,7 +240,10 @@ function game.save()
         table.insert(saveData.entities, {
             x = e.x, y = e.y,
             speed = e.speed, radius = e.radius, despairPerSec = e.despairPerSec,
-            aggression = e.aggression, lightAvoidance = e.lightAvoidance, active = e.active,
+            aggression = e.aggression, lightAvoidance = e.lightAvoidance,
+            hearingRange = e.hearingRange,
+            state = e.state,          -- <-- add
+            active = e.active,
         })
     end
     for _, d in ipairs(game.denizens) do
@@ -274,10 +278,15 @@ function game.load()
     for _, cd in ipairs(saveData.comforts) do game.addComfort(cd.x, cd.y) end
     for _, ed in ipairs(saveData.entities) do
         local ent = Entity.create(ed.x, ed.y, {
-            speed = ed.speed, radius = ed.radius, despairPerSec = ed.despairPerSec,
-            aggression = ed.aggression, lightAvoidance = ed.lightAvoidance,
+            speed = ed.speed,
+            radius = ed.radius,
+            despairPerSec = ed.despairPerSec,
+            aggression = ed.aggression,
+            lightAvoidance = ed.lightAvoidance,
+            hearingRange = ed.hearingRange or cfg.ENTITY_DEFAULTS.hearingRange,
         })
         ent.active = ed.active
+        ent.state = ed.state or "lurking"   -- <-- restore or default
         table.insert(game.entities, ent)
     end
     for _, dd in ipairs(saveData.denizens) do

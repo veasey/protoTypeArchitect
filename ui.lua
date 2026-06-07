@@ -239,41 +239,6 @@ function ui.draw(efficiency, denizenCount)
         y = y + 28
     end
 
-        -- Tooltip for hovered object
-    local hovered = game.hoveredObject
-    if hovered then
-        y = y + 10
-        love.graphics.setColor(1, 1, 1, 0.9)
-        if hovered.type == "entity" then
-            local e = hovered.data
-            love.graphics.print("Entity", x, y)
-            y = y + 16
-            love.graphics.print(string.format("Speed: %.0f", e.speed), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Radius: %.0f", e.radius), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Despair/s: %.2f", e.despairPerSec), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Aggression: %.2f", e.aggression), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Light Avoid: %.2f", e.lightAvoidance), x, y)
-            y = y + 16
-        elseif hovered.type == "denizen" then
-            local d = hovered.data
-            love.graphics.print("Denizen", x, y)
-            y = y + 16
-            love.graphics.print(string.format("State: %s", d.state), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Despair: %.2f", d.profile.despair), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Anxiety: %.2f", d.profile.anxiety), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Speed: %.0f", d.profile.speed), x, y)
-            y = y + 16
-        end
-        y = y + 5
-    end
-
     addButton("None", cfg.TOOL_NONE)
     addButton("Lamp", cfg.TOOL_LAMP)
     addButton("Entity", cfg.TOOL_ENTITY)
@@ -291,7 +256,7 @@ function ui.draw(efficiency, denizenCount)
     local function addSlider(label, min, max, getVal, setVal)
         local sx, sy = x, y
         local sw, sh = 200, 20
-        local val = getVal()
+        local val = getVal() or 0
         love.graphics.setColor(0.5, 0.5, 0.5)
         love.graphics.rectangle("fill", sx, sy, sw, sh)
         local frac = (val - min) / (max - min)
@@ -319,6 +284,9 @@ function ui.draw(efficiency, denizenCount)
     addSlider("Light Avoid", -1, 1,
         function() return game.entityTemplate.lightAvoidance end,
         function(v) game.entityTemplate.lightAvoidance = v end)
+    addSlider("Hearing", 50, 600,
+        function() return game.entityTemplate.hearingRange end,
+        function(v) game.entityTemplate.hearingRange = v end)
 
     y = y + 5
     love.graphics.setColor(0.27, 0.27, 0.27)
@@ -329,6 +297,45 @@ function ui.draw(efficiency, denizenCount)
     y = y + 40
     love.graphics.setColor(0.6, 0.6, 0.6)
     love.graphics.print("Drag map to explore.\nScroll to zoom.", x, y)
+
+    -- Tooltip for hovered object
+    local hovered = game.hoveredObject
+    if hovered then
+        y = y + 10
+        love.graphics.setColor(1, 1, 1, 0.9)
+        if hovered.type == "entity" then
+            local e = hovered.data
+            love.graphics.print("Entity", x, y)
+            y = y + 16
+            love.graphics.print("State: " .. (e.state or "unknown"), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Speed: %.0f", e.speed), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Radius: %.0f", e.radius), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Despair/s: %.2f", e.despairPerSec), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Aggression: %.2f", e.aggression), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Light Avoid: %.2f", e.lightAvoidance), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Hearing: %.0f", e.hearingRange), x, y)
+            y = y + 16
+        elseif hovered.type == "denizen" then
+            local d = hovered.data
+            love.graphics.print("Denizen", x, y)
+            y = y + 16
+            love.graphics.print(string.format("State: %s", d.state), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Despair: %.2f", d.profile.despair), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Anxiety: %.2f", d.profile.anxiety), x, y)
+            y = y + 16
+            love.graphics.print(string.format("Speed: %.0f", d.profile.speed), x, y)
+            y = y + 16
+        end
+        y = y + 5
+    end
 end
 
 return ui
