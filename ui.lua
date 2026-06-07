@@ -298,6 +298,11 @@ function ui.draw(efficiency, denizenCount)
     love.graphics.setColor(0.6, 0.6, 0.6)
     love.graphics.print("Drag map to explore.\nScroll to zoom.", x, y)
 
+    -- pause button
+    addButton(game.paused and "Resume" or "Pause", nil, function()
+        game.paused = not game.paused
+    end)
+
     -- Tooltip for hovered object
     local hovered = game.hoveredObject
     if hovered then

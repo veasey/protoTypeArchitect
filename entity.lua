@@ -1,5 +1,6 @@
-local cfg  = require("config")
-local util = require("util")
+local cfg   = require("config")
+local util  = require("util")
+local audio = require("audio")
 
 local Entity = {}
 Entity.__index = Entity
@@ -18,6 +19,7 @@ function Entity.create(x, y, template)
     self.vx = 0
     self.vy = 0
     self.state = "lurking"      -- "lurking", "shambling", "chasing", "fleeing_light", "seeking_light", "investigating"
+    self.previousState = "lurking"   -- track to detect state changes
     self.wanderTimer    = 0
     self.nextWander     = 2
     self.chaseTarget    = nil
@@ -57,6 +59,13 @@ function Entity:update(dt, map, denizens, lightmap)
     if target then
         self.state = "chasing"
         self.investigateTarget = nil
+        
+        -- Detect transition to chasing
+        if self.state == "chasing" and self.previousState ~= "chasing" then
+            audio.playEntityChaseSound()
+        end
+        self.previousState = self.state
+        
         self.pathTimer = self.pathTimer + dt
         if self.pathTimer >= 0.5 then
             self.pathTimer = 0
@@ -142,6 +151,11 @@ function Entity:update(dt, map, denizens, lightmap)
                 self.vy = math.sin(angle) * self.speed
             end
         end
+    end
+
+    -- Detect transition from chasing
+    if self.state ~= "chasing" and self.previousState == "chasing" then
+        audio.stopEntityChaseSound()
     end
 
     -- Always apply movement every frame

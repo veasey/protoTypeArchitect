@@ -18,16 +18,24 @@ function love.load()
     audio.load()
 
     game.init()
+    game.paused = false
 end
 
 function love.update(dt)
-    game.update(dt)
+    local effectiveDt = game.paused and 0 or dt
+    game.update(effectiveDt)
     
     audio.updateLampLoops(camera.x, camera.y, camera.zoom, cfg.GAME_WIDTH, cfg.WINDOW_HEIGHT)
 
     -- Update hovered object (for tooltips)
     local mx, my = love.mouse.getPosition()
     game.hoveredObject = game.getHoveredObject(mx, my, camera)
+end
+
+function love.keypressed(key)
+    if key == "p" then
+        game.paused = not game.paused
+    end
 end
 
 function love.draw()

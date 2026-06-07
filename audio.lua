@@ -7,6 +7,7 @@ local buildSound         -- one-shot for build/remove
 local lampPlaceSound     -- one-shot for placing a lamp
 local lampHumSource      -- prototype source for looping lamp hum (mono)
 local entityPlaceSound   -- one-shot for placing an entity
+local entityChaseSound   -- looping sound when entities are chasing
 
 -- Active looping lamp sources: table of { source, lamp }
 local lampLoops = {}
@@ -72,6 +73,19 @@ function audio.load()
         entityPlaceSound = generateTone(880, 0.1, false)
     end
 
+    -- Entity chase sound (looping, mono for spatial)
+    file = "sounds/slime_monster_2.wav"
+    if love.filesystem.getInfo(file) then
+        local sd = love.sound.newSoundData(file)
+        local monoSD = toMono(sd)
+        entityChaseSound = love.audio.newSource(monoSD)
+        entityChaseSound:setLooping(true)
+        print("Loaded entity chase sound: " .. file)
+    else
+        print("Entity chase sound not found, using fallback low drone.")
+        lampHumSource = generateTone(980, 0.1, true)
+    end
+
     -- Lamp hum (must be mono for spatial audio)
     file = "sounds/light_hum.wav"
     if love.filesystem.getInfo(file) then
@@ -117,6 +131,21 @@ function audio.playEntityPlaceSound()
         print("Playing entity place sound")
         entityPlaceSound:stop()
         entityPlaceSound:play()
+    end
+end
+
+-- Entity chase looping sound
+function audio.playEntityChaseSound()
+    if entityChaseSound then
+        entityChaseSound:stop()
+        entityChaseSound:play()
+    end
+end
+
+function audio.stopEntityChaseSound()
+    if entityChaseSound then
+        print("Stopping entityChaseSound sound")
+        entityChaseSound:stop()
     end
 end
 
