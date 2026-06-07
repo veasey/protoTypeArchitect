@@ -8,6 +8,7 @@ local lampPlaceSound     -- one-shot for placing a lamp
 local lampHumSource      -- prototype source for looping lamp hum (mono)
 local entityPlaceSound   -- one-shot for placing an entity
 local entityChaseSound   -- looping sound when entities are chasing
+local noclipSound        -- denizen entry sound
 
 -- Active looping lamp sources: table of { source, lamp }
 local lampLoops = {}
@@ -74,7 +75,7 @@ function audio.load()
     end
 
     -- Entity chase sound (looping, mono for spatial)
-    file = "sounds/slime_monster_2.wav"
+    file = "sounds/roar.mp3"
     if love.filesystem.getInfo(file) then
         local sd = love.sound.newSoundData(file)
         local monoSD = toMono(sd)
@@ -97,6 +98,13 @@ function audio.load()
     else
         print("Lamp hum not found, using fallback low drone.")
         lampHumSource = generateTone(55, 2, true)  -- looping low hum
+    end
+
+    -- noclip sounds
+    file = "sounds/noclip.mp3"
+    if love.filesystem.getInfo(file) then
+        noclipSound = love.audio.newSource(file, "static")
+        print("Loaded noclip sound: " .. file)
     end
 end
 
@@ -134,7 +142,7 @@ function audio.playEntityPlaceSound()
     end
 end
 
--- Entity chase looping sound
+-- Play function (called when chasing starts)
 function audio.playEntityChaseSound()
     if entityChaseSound then
         entityChaseSound:stop()
@@ -142,9 +150,9 @@ function audio.playEntityChaseSound()
     end
 end
 
+-- Stop function (called when chasing ends)
 function audio.stopEntityChaseSound()
     if entityChaseSound then
-        print("Stopping entityChaseSound sound")
         entityChaseSound:stop()
     end
 end
@@ -169,6 +177,22 @@ function audio.removeLampLoop(lamp)
             table.remove(lampLoops, i)
             break
         end
+    end
+end
+
+-- Denizen Enters
+function audio.playDenizenEnterLeaveSound()
+    if noclipSound then
+        print("Playing noclip sound")
+        noclipSound:stop()
+        noclipSound:play()
+    end
+end
+
+function audio.stopDenizenEnterLeaveSound()
+    if noclipSound then
+        print("Stopping noclip sound")
+        noclipSound:stop()
     end
 end
 

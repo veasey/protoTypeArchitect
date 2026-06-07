@@ -47,6 +47,7 @@ function game.spawnDenizen()
         local light = game.lightmap[tile.y] and game.lightmap[tile.y][tile.x] or 0
         if light >= cfg.DENIZEN_SPAWN_MIN_LIGHT then
             table.insert(candidates, tile)
+            audio.playDenizenEnterLeaveSound()
         end
     end
     if #candidates == 0 then return end
@@ -96,6 +97,7 @@ function game.clearTile(tileX, tileY)
         if tx == tileX and ty == tileY then
             effects.addObjectFade("denizen", d.x, d.y, 1, 1)
             table.remove(game.denizens, i)
+            audio.playDenizenEnterLeaveSound()
         end
     end
 end

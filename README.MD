@@ -4,6 +4,8 @@ PROTOTYPE: ARCHITECT
 A very simple prototype for a concept running on the LOVE engine for a game about managing a liminal labyrinth.
 As denizens find themselves within the corridors, balance their psychological state to an optimum (between comfort and despair) using light sources and lovecraftian entities.
 
+Press `p` to PAUSE.
+
 ## Credits and Thanks
 
 ### Sound Effects
@@ -15,3 +17,7 @@ from Pixabay
     - Wet Squelch
 - Dragon Studio
     - Gooey Slime Monster
+- ZpPizza
+    - No Clip Sound
+- CJB123
+    - Creature Roar

@@ -18,8 +18,8 @@ function Entity.create(x, y, template)
     self.active         = true
     self.vx = 0
     self.vy = 0
-    self.state = "lurking"      -- "lurking", "shambling", "chasing", "fleeing_light", "seeking_light", "investigating"
-    self.previousState = "lurking"   -- track to detect state changes
+    self.state = "lurking"
+    self.previousState = "lurking"
     self.wanderTimer    = 0
     self.nextWander     = 2
     self.chaseTarget    = nil
@@ -31,7 +31,7 @@ end
 function Entity:update(dt, map, denizens, lightmap)
     if not self.active then return end
 
-    -- First, check hearing (all denizens within hearing range)
+    -- Hearing
     local heardDenizen = nil
     for _, den in ipairs(denizens) do
         local d = util.distance(self.x, self.y, den.x, den.y)
@@ -41,7 +41,7 @@ function Entity:update(dt, map, denizens, lightmap)
         end
     end
 
-    -- Chase logic: find nearest denizen within chase radius (radius * aggression) and line-of-sight
+    -- Chase logic (line-of-sight required)
     local chaseRadius = self.radius * self.aggression
     local target = nil
     local minDist = chaseRadius
@@ -56,16 +56,35 @@ function Entity:update(dt, map, denizens, lightmap)
     end
     self.chaseTarget = target
 
+    -- State transitions
     if target then
         self.state = "chasing"
         self.investigateTarget = nil
-        
-        -- Detect transition to chasing
+        -- Sound trigger (only once when entering chasing)
         if self.state == "chasing" and self.previousState ~= "chasing" then
             audio.playEntityChaseSound()
         end
-        self.previousState = self.state
-        
+    elseif heardDenizen and self.aggression > 0
+           and not util.hasLineOfSight(map, self.x, self.y, heardDenizen.x, heardDenizen.y) then
+        self.state = "investigating"
+        self.investigateTarget = heardDenizen
+        self.chaseTarget = nil
+    else
+        self.investigateTarget = nil
+        self.chaseTarget = nil
+        if self.lightAvoidance ~= 0 and lightmap then
+            if self.lightAvoidance > 0 then
+                self.state = "seeking_light"
+            else
+                self.state = "fleeing_light"
+            end
+        else
+            self.state = "shambling"
+        end
+    end
+
+    -- Movement (based on state)
+    if self.state == "chasing" and target then
         self.pathTimer = self.pathTimer + dt
         if self.pathTimer >= 0.5 then
             self.pathTimer = 0
@@ -77,16 +96,11 @@ function Entity:update(dt, map, denizens, lightmap)
                 self.vx = 0; self.vy = 0
             end
         end
-    elseif heardDenizen and self.aggression > 0
-           and not util.hasLineOfSight(map, self.x, self.y, heardDenizen.x, heardDenizen.y) then
-        -- Investigate the sound
-        self.state = "investigating"
-        self.investigateTarget = heardDenizen
-        self.chaseTarget = nil
+    elseif self.state == "investigating" and self.investigateTarget then
         self.pathTimer = self.pathTimer + dt
         if self.pathTimer >= 0.5 then
             self.pathTimer = 0
-            local dx, dy = util.getPathDirection(map, self.x, self.y, heardDenizen.x, heardDenizen.y, false)
+            local dx, dy = util.getPathDirection(map, self.x, self.y, self.investigateTarget.x, self.investigateTarget.y, false)
             if dx then
                 self.vx = dx * self.speed
                 self.vy = dy * self.speed
@@ -95,21 +109,15 @@ function Entity:update(dt, map, denizens, lightmap)
             end
         end
     else
-        -- Idle / Wander / Light bias
-        self.investigateTarget = nil
-        self.chaseTarget = nil
-        if self.lightAvoidance ~= 0 and lightmap then
-            local tileX, tileY = map.worldToTile(self.x, self.y)
-            local curLight = lightmap[tileY] and lightmap[tileY][tileX] or 0
-            if self.lightAvoidance > 0 then
-                self.state = "seeking_light"
-            else
-                self.state = "fleeing_light"
-            end
-            self.wanderTimer = self.wanderTimer + dt
-            if self.wanderTimer >= self.nextWander then
-                self.wanderTimer = 0
-                self.nextWander = 1.5 + love.math.random() * 1.5
+        -- Wander / light bias movement
+        self.wanderTimer = self.wanderTimer + dt
+        if self.wanderTimer >= self.nextWander then
+            self.wanderTimer = 0
+            self.nextWander = 1.5 + love.math.random() * 1.5
+            local baseVx, baseVy = 0, 0
+            if self.lightAvoidance ~= 0 and lightmap then
+                local tileX, tileY = map.worldToTile(self.x, self.y)
+                local curLight = lightmap[tileY] and lightmap[tileY][tileX] or 0
                 local bestDx, bestDy = 0, 0
                 local bestLight = curLight
                 local dirs = {{-1,0},{1,0},{0,-1},{0,1}}
@@ -117,48 +125,40 @@ function Entity:update(dt, map, denizens, lightmap)
                     local nx, ny = tileX + d[1], tileY + d[2]
                     if map.isWalkable(nx, ny) then
                         local nlight = lightmap[ny] and lightmap[ny][nx] or 0
-                        if self.lightAvoidance > 0 then
-                            if nlight > bestLight then
-                                bestLight = nlight
-                                bestDx, bestDy = d[1], d[2]
-                            end
-                        else
-                            if nlight < bestLight then
-                                bestLight = nlight
-                                bestDx, bestDy = d[1], d[2]
-                            end
+                        if self.lightAvoidance > 0 and nlight > bestLight then
+                            bestLight = nlight
+                            bestDx, bestDy = d[1], d[2]
+                        elseif self.lightAvoidance < 0 and nlight < bestLight then
+                            bestLight = nlight
+                            bestDx, bestDy = d[1], d[2]
                         end
                     end
                 end
                 if bestDx ~= 0 or bestDy ~= 0 then
                     local len = math.sqrt(bestDx*bestDx + bestDy*bestDy)
-                    self.vx = (bestDx / len) * self.speed
-                    self.vy = (bestDy / len) * self.speed
-                else
-                    self.vx = 0; self.vy = 0
+                    baseVx = (bestDx / len) * self.speed
+                    baseVy = (bestDy / len) * self.speed
                 end
-            end
-            -- Continuous movement: velocity persists between direction changes
-        else
-            -- No light bias: shambling
-            self.state = "shambling"
-            self.wanderTimer = self.wanderTimer + dt
-            if self.wanderTimer >= self.nextWander then
-                self.wanderTimer = 0
-                self.nextWander = 1.5 + love.math.random() * 1.5
+            else
                 local angle = love.math.random() * math.pi * 2
-                self.vx = math.cos(angle) * self.speed
-                self.vy = math.sin(angle) * self.speed
+                baseVx = math.cos(angle) * self.speed
+                baseVy = math.sin(angle) * self.speed
             end
+            self.vx = baseVx
+            self.vy = baseVy
         end
+        -- velocity persists until next timer fire
     end
 
-    -- Detect transition from chasing
+    -- Stop chase sound when leaving chasing state
     if self.state ~= "chasing" and self.previousState == "chasing" then
         audio.stopEntityChaseSound()
     end
 
-    -- Always apply movement every frame
+    -- Update previous state for next frame
+    self.previousState = self.state
+
+    -- Apply movement
     self:move(self.vx, self.vy, dt, map)
 end
 
