@@ -87,6 +87,9 @@ function game.clearTile(tileX, tileY)
             local scale = e.radius / 16
             effects.addObjectFade("entity", e.x, e.y, 1, 1)
             table.remove(game.entities, i)
+            if e.state == "chasing" then
+                audio.stopEntityChaseSound()
+            end
         end
     end
 
