@@ -42,6 +42,7 @@ config.DENIZEN_SIGHT_RANGE = 100
 config.AVOID_DESPAIR_THRESHOLD = 0.5   -- above this despair, start avoiding
 config.AVOID_LOOK_AHEAD = 1.0          -- seconds of movement to check ahead
 config.AVOID_STRENGTH = 2.0            -- rotation force per entity (radians)
+config.FEAR_DURATION = 5   -- seconds denizen keeps fleeing after losing sight of chaser
 
 config.BASE_DESPAIR_RATE   = 0.02
 config.COMFORT_CLOSE       = 80

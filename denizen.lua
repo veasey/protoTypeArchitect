@@ -1,6 +1,6 @@
 local cfg  = require("config")
 local util = require("util")
-local map  = require("map")   -- needed for line-of-sight
+local map  = require("map")
 
 local Denizen = {}
 Denizen.__index = Denizen
@@ -22,12 +22,16 @@ function Denizen.create(x, y)
     self.nextWander  = 1.5
     self.hidingTimer = 0
     self.hideCooldown = 0
+    -- Fear memory
+    self.lastChaserPos = nil   -- {x, y} of last seen chaser
+    self.fearTimer = 0         -- seconds remaining to flee even after sight lost
     return self
 end
 
 function Denizen:update(dt, mapObj, entities, lightmap)
-    -- Reduce hide cooldown
+    -- Reduce timers
     self.hideCooldown = math.max(0, self.hideCooldown - dt)
+    self.fearTimer = math.max(0, self.fearTimer - dt)
 
     -- Get light level at denizen's tile
     local tileX, tileY = mapObj.worldToTile(self.x, self.y)
@@ -35,7 +39,7 @@ function Denizen:update(dt, mapObj, entities, lightmap)
     lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
     local effectiveSight = cfg.DENIZEN_SIGHT_RANGE * lightLevel
 
-    -- Scan entities (with line-of-sight)
+    -- Scan entities (line-of-sight)
     local closestChaser = nil
     local closestChaseDist = math.huge
     local anyEntitySeen = false
@@ -58,29 +62,21 @@ function Denizen:update(dt, mapObj, entities, lightmap)
         end
     end
 
-    -- Remember previous state
+    -- If we see a chaser, update fear memory and reset fear timer
+    if closestChaser then
+        self.lastChaserPos = {x = closestChaser.x, y = closestChaser.y}
+        self.fearTimer = cfg.FEAR_DURATION
+    end
+
+    -- State determination
     self.previousState = self.state
 
-    -- State transitions
     if closestChaser then
         self.state = "fleeing"
         self.hidingTimer = 0
-        -- Use pathfinding to flee away from chaser (avoidTarget = true)
-        local fleeDx, fleeDy = util.getPathDirection(mapObj, self.x, self.y, closestChaser.x, closestChaser.y, true)
-        if fleeDx then
-            self.vx = fleeDx * self.profile.speed * 1.5
-            self.vy = fleeDy * self.profile.speed * 1.5
-        else
-            -- fallback to direct away (may hit wall, but better than nothing)
-            local dx = self.x - closestChaser.x
-            local dy = self.y - closestChaser.y
-            local len = math.sqrt(dx*dx + dy*dy)
-            if len > 0 then
-                dx, dy = dx / len, dy / len
-            end
-            self.vx = dx * self.profile.speed * 1.5
-            self.vy = dy * self.profile.speed * 1.5
-        end
+    elseif self.fearTimer > 0 and self.lastChaserPos then
+        -- No chaser currently visible, but still fleeing from last known position
+        self.state = "fleeing"
     elseif anyEntitySeen and self.hideCooldown <= 0 then
         self.state = "hiding"
         self.vx = 0
@@ -100,18 +96,57 @@ function Denizen:update(dt, mapObj, entities, lightmap)
     end
 
     -- Movement
-    if self.state == "wandering" then
+    if self.state == "fleeing" then
+        -- Determine flee target: current chaser or last known chaser
+        local fleeFromX, fleeFromY
+        if closestChaser then
+            fleeFromX = closestChaser.x
+            fleeFromY = closestChaser.y
+        elseif self.lastChaserPos then
+            fleeFromX = self.lastChaserPos.x
+            fleeFromY = self.lastChaserPos.y
+        end
+
+        if fleeFromX then
+            -- Use pathfinding to flee away (avoidTarget = true)
+            local fleeDx, fleeDy = util.getPathDirection(mapObj, self.x, self.y, fleeFromX, fleeFromY, true)
+            if fleeDx then
+                self.vx = fleeDx * self.profile.speed * 1.5
+                self.vy = fleeDy * self.profile.speed * 1.5
+            else
+                -- Fallback: direct away
+                local dx = self.x - fleeFromX
+                local dy = self.y - fleeFromY
+                local len = math.sqrt(dx*dx + dy*dy)
+                if len > 0 then
+                    dx, dy = dx / len, dy / len
+                end
+                self.vx = dx * self.profile.speed * 1.5
+                self.vy = dy * self.profile.speed * 1.5
+            end
+        end
+    elseif self.state == "wandering" then
         self.wanderTimer = self.wanderTimer + dt
         if self.wanderTimer >= self.nextWander then
             self.wanderTimer = 0
             self.nextWander = 1.0 + love.math.random() * 1.5
 
-            -- Base random angle
             local angle = love.math.random() * math.pi * 2
 
-            -- Avoidance: if denizen is stressed, bias away from high-despair zones
+            -- Avoidance: if recently feared, steer away from last chaser location
+            if self.fearTimer > 0 and self.lastChaserPos then
+                local dx = self.x - self.lastChaserPos.x
+                local dy = self.y - self.lastChaserPos.y
+                local len = math.sqrt(dx*dx + dy*dy)
+                if len > 0 then
+                    local awayAngle = math.atan2(dy, dx)
+                    -- Blend wander angle towards away from fear
+                    angle = awayAngle + (love.math.random() - 0.5) * 0.5  -- narrow random around away direction
+                end
+            end
+
+            -- Despair-based avoidance (same as before)
             if self.profile.despair >= cfg.AVOID_DESPAIR_THRESHOLD then
-                -- Project forward a short distance
                 local lookDist = self.profile.speed * cfg.AVOID_LOOK_AHEAD
                 local probeX = self.x + math.cos(angle) * lookDist
                 local probeY = self.y + math.sin(angle) * lookDist
@@ -123,31 +158,25 @@ function Denizen:update(dt, mapObj, entities, lightmap)
                     if ent.active then
                         local distToProbe = util.distance(probeX, probeY, ent.x, ent.y)
                         if distToProbe <= ent.radius then
-                            -- How much despair would we take? (approx)
                             local intensity = ent.despairPerSec
-                            -- Weight by how much we are over threshold
                             local over = self.profile.despair - cfg.AVOID_DESPAIR_THRESHOLD
                             local weight = over * intensity * cfg.AVOID_STRENGTH
-                            -- Direction from entity to probe (we want to steer away)
-                            local dx = probeX - ent.x
-                            local dy = probeY - ent.y
-                            local len = math.sqrt(dx*dx + dy*dy)
-                            if len > 0 then
-                                dx, dy = dx / len, dy / len
+                            local ex = probeX - ent.x
+                            local ey = probeY - ent.y
+                            local elen = math.sqrt(ex*ex + ey*ey)
+                            if elen > 0 then
+                                ex, ey = ex / elen, ey / elen
                             end
-                            avoidanceAngle = avoidanceAngle + math.atan2(dy, dx) * weight
+                            avoidanceAngle = avoidanceAngle + math.atan2(ey, ex) * weight
                             avoidanceWeight = avoidanceWeight + weight
                         end
                     end
                 end
 
                 if avoidanceWeight > 0 then
-                    -- Blend: rotate base angle towards avoidance direction
                     local avoidDir = avoidanceAngle / avoidanceWeight
-                    -- Mix base angle with avoidDir (strong avoidance)
+                    local targetAngle = avoidDir + math.pi
                     local mix = math.min(1, avoidanceWeight)
-                    local targetAngle = avoidDir + math.pi  -- opposite direction
-                    -- Interpolate between base angle and target angle
                     angle = angle + math.atan2(math.sin(targetAngle - angle), math.cos(targetAngle - angle)) * mix
                 end
             end
@@ -155,10 +184,8 @@ function Denizen:update(dt, mapObj, entities, lightmap)
             self.vx = math.cos(angle) * self.profile.speed
             self.vy = math.sin(angle) * self.profile.speed
         end
-    elseif self.state == "fleeing" then
-        -- velocity already set
     elseif self.state == "hiding" then
-        -- velocity is zero
+        -- velocity zero (already set)
     end
 
     -- Move with collision
