@@ -300,7 +300,7 @@ function ui.draw(efficiency, denizenCount)
 
     -- pause button
     addButton(game.paused and "Resume" or "Pause", nil, function()
-        game.paused = not game.paused
+        game.togglePauseState()
     end)
 
     -- Tooltip for hovered object

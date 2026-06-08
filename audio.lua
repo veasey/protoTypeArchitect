@@ -2,13 +2,14 @@
 -- Centralised sound manager with fallback tones if files missing.
 
 local audio = {}
+local managedSources = {}   -- list of all audio sources we want to control
 
 local buildSound         -- one-shot for build/remove
 local lampPlaceSound     -- one-shot for placing a lamp
 local lampHumSource      -- prototype source for looping lamp hum (mono)
 local entityPlaceSound   -- one-shot for placing an entity
 local entityChaseSound   -- looping sound when entities are chasing
-local noclipSound        -- denizen entry sound
+local noclipSound        -- denizen entry/exit sound
 
 -- Active looping lamp sources: table of { source, lamp }
 local lampLoops = {}
@@ -53,6 +54,7 @@ function audio.load()
         print("Build sound not found, using fallback beep.")
         buildSound = generateTone(220, 0.4, false)
     end
+    table.insert(managedSources, buildSound)   -- moved here (after assignment)
 
     -- Lamp place sound
     file = "sounds/light_on.wav"
@@ -63,6 +65,7 @@ function audio.load()
         print("Lamp place sound not found, using fallback ping.")
         lampPlaceSound = generateTone(440, 0.2, false)
     end
+    table.insert(managedSources, lampPlaceSound)
 
     -- Entity place sound
     file = "sounds/slime_monster_1.wav"
@@ -73,8 +76,9 @@ function audio.load()
         print("Entity place sound not found, using fallback click.")
         entityPlaceSound = generateTone(880, 0.1, false)
     end
+    table.insert(managedSources, entityPlaceSound)
 
-    -- Entity chase sound (looping, mono for spatial)
+    -- Entity chase sound (roar)
     file = "sounds/roar.mp3"
     if love.filesystem.getInfo(file) then
         local sd = love.sound.newSoundData(file)
@@ -83,9 +87,10 @@ function audio.load()
         entityChaseSound:setLooping(true)
         print("Loaded entity chase sound: " .. file)
     else
-        print("Entity chase sound not found, using fallback low drone.")
-        lampHumSource = generateTone(980, 0.1, true)
+        print("Entity chase sound not found, using fallback tone.")
+        entityChaseSound = generateTone(980, 0.3, true)   -- fixed: was overwriting lampHumSource
     end
+    table.insert(managedSources, entityChaseSound)
 
     -- Lamp hum (must be mono for spatial audio)
     file = "sounds/light_hum.wav"
@@ -97,14 +102,20 @@ function audio.load()
         print("Loaded lamp hum: " .. file)
     else
         print("Lamp hum not found, using fallback low drone.")
-        lampHumSource = generateTone(55, 2, true)  -- looping low hum
+        lampHumSource = generateTone(55, 2, true)
     end
+    -- Do NOT add lampHumSource prototype to managedSources; each clone is added separately.
 
-    -- noclip sounds
+    -- noclip sound
     file = "sounds/noclip.mp3"
     if love.filesystem.getInfo(file) then
         noclipSound = love.audio.newSource(file, "static")
         print("Loaded noclip sound: " .. file)
+    else
+        print("noclip sound not found – skipping.")
+    end
+    if noclipSound then
+        table.insert(managedSources, noclipSound)
     end
 end
 
@@ -142,15 +153,14 @@ function audio.playEntityPlaceSound()
     end
 end
 
--- Play function (called when chasing starts)
-function audio.playEntityChaseSound()
+-- Entity chase sound (roar)
+function audio.playEntityChaseSound()          -- wrapper that matches entity.lua call
     if entityChaseSound then
         entityChaseSound:stop()
         entityChaseSound:play()
     end
 end
 
--- Stop function (called when chasing ends)
 function audio.stopEntityChaseSound()
     if entityChaseSound then
         entityChaseSound:stop()
@@ -163,9 +173,10 @@ function audio.addLampLoop(lamp)
     print("Adding lamp loop for lamp at " .. lamp.x .. "," .. lamp.y)
     local source = lampHumSource:clone()
     source:setLooping(true)
-    source:setRelative(true)   -- safe because source is mono
+    source:setRelative(true)
     source:play()
     table.insert(lampLoops, { source = source, lamp = lamp })
+    table.insert(managedSources, source)   -- track each clone for pausing
 end
 
 -- Remove the hum associated with a specific lamp
@@ -174,13 +185,20 @@ function audio.removeLampLoop(lamp)
         if entry.lamp == lamp then
             print("Removing lamp loop for lamp at " .. lamp.x .. "," .. lamp.y)
             entry.source:stop()
+            -- Remove from managedSources
+            for j, src in ipairs(managedSources) do
+                if src == entry.source then
+                    table.remove(managedSources, j)
+                    break
+                end
+            end
             table.remove(lampLoops, i)
             break
         end
     end
 end
 
--- Denizen Enters
+-- Denizen enters/leaves
 function audio.playDenizenEnterLeaveSound()
     if noclipSound then
         print("Playing noclip sound")
@@ -209,7 +227,36 @@ function audio.updateLampLoops(cameraX, cameraY, zoom, gameWidth, gameHeight)
 
         local vol = math.max(0, 1 - dist / maxDist)
         source:setVolume(vol)
-        --source:setPosition(dx, dy, 0)
+        --source:setPosition(dx, dy, 0)  -- you can re‑enable if mono works
+    end
+end
+function audio.pauseAll()
+    for _, src in ipairs(managedSources) do
+        if src then
+            -- Try method first, then global function, else fallback to stop
+            if src.pause then
+                src:pause()
+            elseif love.audio.pause then
+                love.audio.pause(src)
+            else
+                src:stop()
+            end
+        end
+    end
+end
+
+function audio.resumeAll()
+    for _, src in ipairs(managedSources) do
+        if src then
+            if src.resume then
+                src:resume()
+            elseif love.audio.resume then
+                love.audio.resume(src)
+            else
+                -- No resume available, stopped sounds stay silent.
+                -- One-shot sounds will play again when triggered.
+            end
+        end
     end
 end
 

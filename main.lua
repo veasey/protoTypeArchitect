@@ -34,7 +34,7 @@ end
 
 function love.keypressed(key)
     if key == "p" then
-        game.paused = not game.paused
+        game.togglePauseState()
     end
 end
 

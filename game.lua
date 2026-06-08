@@ -358,4 +358,14 @@ function game.getHoveredObject(mx, my, camera)
     return bestObj
 end
 
+function game.togglePauseState()
+    game.paused = not game.paused
+
+    if game.paused then
+        audio.pauseAll()
+    else
+        audio.resumeAll()
+    end
+end
+
 return game
