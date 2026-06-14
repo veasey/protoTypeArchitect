@@ -105,24 +105,22 @@ function ui.mousereleased(mx, my, button)
                 local dirX = endTX - startTX
                 local dirY = endTY - startTY
                 local maxDist = math.sqrt(dirX*dirX + dirY*dirY)
-                if maxDist == 0 then maxDist = 1 end   -- single tile click
+                if maxDist == 0 then maxDist = 1 end
 
-                local maxDelay = 0.4   -- total sweep time in seconds
-                local tileList = {}
+                local maxDelay = 0.4
                 for x = rect.x1, rect.x2 do
                     for y = rect.y1, rect.y2 do
                         if fillType == cfg.FLOOR then
                             if map.isBuildable(x, y) then
                                 map.setTile(x, y, fillType)
-                                -- compute delay based on projection along drag vector
                                 local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
-                                local delay = (proj + 0.5) * maxDelay   -- shift so center of rect starts at 0 delay
+                                local delay = (proj + 0.5) * maxDelay
                                 delay = math.max(0, math.min(delay, maxDelay))
                                 effects.addTileFadeIn(x, y, delay)
+                                game.witnessTileChange(x, y)
                             end
                         else
                             if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
-                                -- capture light level before removal
                                 local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
                                 map.setTile(x, y, fillType)
                                 game.clearTile(x, y)
@@ -130,11 +128,11 @@ function ui.mousereleased(mx, my, button)
                                 local delay = (proj + 0.5) * maxDelay
                                 delay = math.max(0, math.min(delay, maxDelay))
                                 effects.addTileFadeOut(x, y, lightLevel, delay)
+                                game.witnessTileChange(x, y)
                             end
                         end
                     end
                 end
-
                 game.computeLighting()
                 audio.playBuildSound()
             end
@@ -142,17 +140,32 @@ function ui.mousereleased(mx, my, button)
             dragBuildStart = nil
             dragBuildCurrent = nil
         else
-            if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
-                local wx, wy = camera.screenToWorld(mx, my)
-                local tileX, tileY = map.worldToTile(wx, wy)
-                if tileX and tileY and map.isWalkable(tileX, tileY) then
-                    local px, py = map.tileToWorld(tileX, tileY)
-                    if activeTool == cfg.TOOL_LAMP then
-                        game.addComfort(px, py)
-                        audio.playLampPlaceSound()
-                    elseif activeTool == cfg.TOOL_ENTITY then
-                        game.addEntity(px, py)
-                        audio.playEntityPlaceSound()
+            -- Single click for other tools
+            local wx, wy = camera.screenToWorld(mx, my)
+            local tileX, tileY = map.worldToTile(wx, wy)
+            if tileX and tileY then
+                if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
+                    if map.isWalkable(tileX, tileY) then
+                        local px, py = map.tileToWorld(tileX, tileY)
+                        if activeTool == cfg.TOOL_LAMP then
+                            game.addComfort(px, py)
+                            audio.playLampPlaceSound()
+                        else
+                            game.addEntity(px, py)
+                            audio.playEntityPlaceSound()
+                        end
+                    end
+                elseif activeTool == cfg.TOOL_FOOD then
+                    if map.isWalkable(tileX, tileY) then
+                        local px, py = map.tileToWorld(tileX, tileY)
+                        game.addFood(px, py)
+                        -- audio.playFoodPlaceSound() -- uncomment when sound available
+                    end
+                elseif activeTool == cfg.TOOL_EXIT then
+                    if map.isWalkable(tileX, tileY) then
+                        local px, py = map.tileToWorld(tileX, tileY)
+                        game.addExit(px, py)
+                        -- audio.playExitPlaceSound() -- uncomment when sound available
                     end
                 end
             end
@@ -216,6 +229,35 @@ function ui.draw(efficiency, denizenCount)
     local x = cfg.GAME_WIDTH + 10
     local y = 10
 
+    -- Resource bars
+    local barWidth = cfg.PANEL_WIDTH - 20
+    local barHeight = 12
+    local barX = x
+    local barY = y + 10
+
+    love.graphics.setColor(0.2, 0.6, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barWidth * game.familiarity, barHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
+    love.graphics.print("Familiarity", barX, barY - 15)
+    barY = barY + barHeight + 8
+
+    love.graphics.setColor(0.6, 0.6, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barWidth * game.unease, barHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
+    love.graphics.print("Unease", barX, barY - 15)
+    barY = barY + barHeight + 8
+
+    love.graphics.setColor(0.6, 0.2, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barWidth * game.dread, barHeight)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
+    love.graphics.print("Dread", barX, barY - 15)
+    barY = barY + barHeight + 15
+
+    y = barY
+
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("Despair Efficiency: " .. efficiency .. "%", x, y)
     y = y + 25
@@ -244,10 +286,15 @@ function ui.draw(efficiency, denizenCount)
     addButton("Entity", cfg.TOOL_ENTITY)
     addButton("Build", cfg.TOOL_BUILD)
     addButton("Remove", cfg.TOOL_REMOVE)
+    addButton("Food", cfg.TOOL_FOOD)
+    addButton("Exit", cfg.TOOL_EXIT)
 
     y = y + 15
     addButton("Save", nil, function() game.save() end)
     addButton("Load", nil, function() game.load() end)
+    addButton(game.paused and "Resume" or "Pause", nil, function()
+        game.togglePauseState()
+    end)
 
     y = y + 15
     love.graphics.print("Entity Editor", x, y)
@@ -298,11 +345,6 @@ function ui.draw(efficiency, denizenCount)
     love.graphics.setColor(0.6, 0.6, 0.6)
     love.graphics.print("Drag map to explore.\nScroll to zoom.", x, y)
 
-    -- pause button
-    addButton(game.paused and "Resume" or "Pause", nil, function()
-        game.togglePauseState()
-    end)
-
     -- Tooltip for hovered object
     local hovered = game.hoveredObject
     if hovered then
@@ -337,6 +379,12 @@ function ui.draw(efficiency, denizenCount)
             love.graphics.print(string.format("Anxiety: %.2f", d.profile.anxiety), x, y)
             y = y + 16
             love.graphics.print(string.format("Speed: %.0f", d.profile.speed), x, y)
+            y = y + 16
+        elseif hovered.type == "food" then
+            love.graphics.print("Food", x, y)
+            y = y + 16
+        elseif hovered.type == "exit" then
+            love.graphics.print("Exit", x, y)
             y = y + 16
         end
         y = y + 5

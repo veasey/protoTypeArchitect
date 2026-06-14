@@ -30,6 +30,7 @@ function love.update(dt)
     -- Update hovered object (for tooltips)
     local mx, my = love.mouse.getPosition()
     game.hoveredObject = game.getHoveredObject(mx, my, camera)
+    
 end
 
 function love.keypressed(key)

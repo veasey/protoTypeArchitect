@@ -23,6 +23,8 @@ config.TOOL_LAMP   = "lamp"
 config.TOOL_ENTITY = "entity"
 config.TOOL_BUILD  = "build"
 config.TOOL_REMOVE = "remove"
+config.TOOL_FOOD   = "food"
+config.TOOL_EXIT   = "exit"
 
 config.START_ROOM_RADIUS = 2
 
@@ -77,5 +79,33 @@ config.DENIZEN_COLOR_HIGH = {0.8, 0.2, 0.2}
 -- Lighting
 config.LIGHT_DECAY_PER_TILE = 0.25
 config.LIGHT_MIN_AMBIENT    = 0.03
+
+-- Resource loop
+config.FAMILIARITY_SPAWN_MULT   = 2.0
+config.UNEASE_SPEED_BOOST       = 0.5
+config.ANXIETY_LIGHT_RECOVERY   = 0.1
+config.ANXIETY_DARK_GAIN        = 0.2
+config.DREAD_SPAWN_THRESHOLD    = 0.6
+config.DREAD_SPAWN_INTERVAL     = 10
+config.DREAD_SPAWN_CHANCE       = 0.5
+config.DREAD_SPAWN_MIN_LIGHT    = 0.1
+
+-- Food
+config.FOOD_RADIUS              = 60
+config.FOOD_DESPAIR_REDUCTION   = 0.05
+config.FOOD_ANXIETY_REDUCTION   = 0.05
+
+-- Exit
+config.EXIT_DETECTION_RANGE     = 250
+config.EXIT_ESCAPE_DISTANCE     = 20
+config.EXIT_FAMILIARITY_BOOST   = 0.1
+
+-- Witness
+config.WITNESS_ANXIETY_SPIKE    = 0.4
+config.WITNESS_DESPAIR_SPIKE    = 0.3
+config.WITNESS_SIGHT_RANGE      = 200
+
+-- Fear
+config.FEAR_DURATION = 5
 
 return config

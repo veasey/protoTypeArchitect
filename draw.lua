@@ -17,7 +17,7 @@ function draw.world()
     local top   = math.max(1, math.floor((camera.y - cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
     local bottom = math.min(cfg.MAP_ROWS, math.ceil((camera.y + cfg.WINDOW_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
 
-    -- Draw tiles with lighting, but skip tiles that are currently fading in
+    -- Draw tiles with lighting (skip fading‑in tiles)
     for r = top, bottom do
         for c = left, right do
             local tile = map.grid[r][c]
@@ -27,8 +27,6 @@ function draw.world()
                 love.graphics.setColor(cfg.COL_VOID)
                 love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
             else
-                -- If this tile is being faded in, don't draw it yet;
-                -- the fade effect will handle its appearance gradually.
                 if not effects.isTileFadingIn(c, r) then
                     local lightLevel = game.lightmap[r] and game.lightmap[r][c] or 0
                     lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
@@ -39,23 +37,21 @@ function draw.world()
         end
     end
 
-    -- ====== TILE FADE EFFECTS ======
+    -- Tile fade effects
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" then
-            -- Tile fades in: draw the lit floor with increasing opacity
             local lightLevel = game.lightmap[e.tileY] and game.lightmap[e.tileY][e.tileX] or 0
             lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
             love.graphics.setColor(lightLevel, lightLevel, lightLevel, 1 - e.alpha)
             love.graphics.draw(sprites.floor, (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE)
         elseif e.type == "tile_fade_out" then
-            -- Tile fades out: draw the floor sprite with captured light, fading away
             local light = e.lightLevel or 1
             love.graphics.setColor(light, light, light, e.alpha)
             love.graphics.draw(sprites.floor, (e.tileX-1)*cfg.TILE_SIZE, (e.tileY-1)*cfg.TILE_SIZE)
         end
     end
 
-    -- ====== OBJECT FADE EFFECTS ======
+    -- Object fade effects
     for _, e in ipairs(effects.list) do
         if e.type == "object_fade" then
             love.graphics.setColor(1, 1, 1, e.alpha)
@@ -69,7 +65,7 @@ function draw.world()
         end
     end
 
-    -- ====== DRAG BUILDING PREVIEW (unchanged) ======
+    -- Drag building preview
     local rect = ui.getDragRect()
     if rect then
         local tool = ui.getActiveTool()
@@ -98,61 +94,64 @@ function draw.world()
         love.graphics.setLineWidth(1)
     end
 
-    -- ====== SINGLE TILE HOVER ======
+    -- Single tile hover (SAFE – everything is inside `if hover`)
     local hover = ui.getHoverTile()
-    if hover and not ui.getDragRect() then
-        local tx = (hover.x-1)*cfg.TILE_SIZE
-        local ty = (hover.y-1)*cfg.TILE_SIZE
-        local valid = false
-        local tool = ui.getActiveTool()
-        if tool == cfg.TOOL_LAMP or tool == cfg.TOOL_ENTITY then
-            valid = map.isWalkable(hover.x, hover.y)
-        elseif tool == cfg.TOOL_BUILD then
-            valid = map.isBuildable(hover.x, hover.y)
-        elseif tool == cfg.TOOL_REMOVE then
-            valid = (map.grid[hover.y] and map.grid[hover.y][hover.x] == cfg.FLOOR)
+    if hover then
+        if not ui.getDragRect() then   -- only show hover when not dragging
+            local tx = (hover.x-1)*cfg.TILE_SIZE
+            local ty = (hover.y-1)*cfg.TILE_SIZE
+            local valid = false
+            local tool = ui.getActiveTool()
+            if tool == cfg.TOOL_LAMP or tool == cfg.TOOL_ENTITY or tool == cfg.TOOL_FOOD or tool == cfg.TOOL_EXIT then
+                valid = map.isWalkable(hover.x, hover.y)
+            elseif tool == cfg.TOOL_BUILD then
+                valid = map.isBuildable(hover.x, hover.y)
+            elseif tool == cfg.TOOL_REMOVE then
+                valid = (map.grid[hover.y] and map.grid[hover.y][hover.x] == cfg.FLOOR)
+            end
+            local r, g, b = 1, 1, 1
+            if not valid then r, g, b = 1, 0.3, 0.3 end
+            love.graphics.setColor(r, g, b, 0.5)
+            love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
+            love.graphics.setColor(r, g, b, 0.9)
+            love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
         end
-        local r, g, b = 1, 1, 1
-        if not valid then r, g, b = 1, 0.3, 0.3 end
-        love.graphics.setColor(r, g, b, 0.5)
-        love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
-        love.graphics.setColor(r, g, b, 0.9)
-        love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
     end
 
-    -- Comfort lamps
+    -- Draw objects
     for _, lamp in ipairs(game.comforts) do
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.lamp, lamp.x - 16, lamp.y - 16)
     end
 
-    -- Entities (fixed sprite size, radius shown only by circle)
     for _, ent in ipairs(game.entities) do
-        -- Red circle showing despair radius
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
-
-        -- Sprite at constant size, centered
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
     end
 
-    -- Denizens
     for _, den in ipairs(game.denizens) do
         local col = den:getColor()
         love.graphics.setColor(col)
         love.graphics.draw(sprites.denizen, den.x - 16, den.y - 16)
-
         if den.state == "hiding" then
-            -- Draw a small yellow exclamation mark above the denizen
             love.graphics.setColor(1, 0.9, 0, 1)
             love.graphics.circle("fill", den.x, den.y - 18, 3)
             love.graphics.setColor(0, 0, 0, 1)
             love.graphics.print("!", den.x - 4, den.y - 26)
-            love.graphics.setColor(1, 1, 1, 1)  -- reset
+            love.graphics.setColor(1, 1, 1, 1)
         end
+    end
 
+    for _, food in ipairs(game.foods) do
         love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(sprites.food, food.x - 16, food.y - 16)
+    end
+
+    for _, exitObj in ipairs(game.exits) do
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(sprites.exit, exitObj.x - 16, exitObj.y - 16)
     end
 
     camera.popTransform()
