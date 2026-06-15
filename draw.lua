@@ -11,6 +11,18 @@ local draw = {}
 function draw.world()
     camera.applyTransform()
 
+     -- ====== SELECTION SQUARE ======
+    local hovered = game.hoveredObject
+    if hovered and hovered.data then
+        local obj = hovered.data
+        local hx, hy = obj.x, obj.y
+        local s = 16  -- half-size of selection square
+        love.graphics.setColor(1, 1, 0, 0.8)
+        love.graphics.setLineWidth(2)
+        love.graphics.rectangle("line", hx - s, hy - s, s*2, s*2)
+        love.graphics.setLineWidth(1)
+    end
+
     local invZoom = 1 / camera.zoom
     local left  = math.max(1, math.floor((camera.x - cfg.GAME_WIDTH/2 * invZoom) / cfg.TILE_SIZE))
     local right = math.min(cfg.MAP_COLS, math.ceil((camera.x + cfg.GAME_WIDTH/2 * invZoom) / cfg.TILE_SIZE))

@@ -8,20 +8,39 @@ local audio   = require("audio")
 
 local ui = {}
 
-local buttons = {}
-local sliders = {}
+-- ========== STATE ==========
+local buttons = {}        -- right-panel buttons
+local sliders = {}        -- entity editor sliders
 local sliderDrag = nil
 local dragStart = nil
 local dragging = false
 
 local activeTool = cfg.TOOL_NONE
-
 local dragBuildStart = nil
 local dragBuildCurrent = nil
 local isDraggingBuild = false
-
 local hoverTileX, hoverTileY = nil, nil
 
+-- ========== DRAWING HELPERS ==========
+local function bevelBox(x, y, w, h, sunken)
+    love.graphics.setColor(sunken and cfg.COL_UI_BEVEL_LO or cfg.COL_UI_BEVEL_HI)
+    love.graphics.rectangle("line", x, y, w, h)
+    love.graphics.setColor(sunken and cfg.COL_UI_BEVEL_HI or cfg.COL_UI_BEVEL_LO)
+    love.graphics.line(x+w-1, y, x+w-1, y+h-1)
+    love.graphics.line(x, y+h-1, x+w-1, y+h-1)
+end
+
+local function bevelButton(x, y, w, h, text, active)
+    love.graphics.setColor(active and cfg.COL_UI_BUTTON_HI or cfg.COL_UI_BUTTON)
+    love.graphics.rectangle("fill", x, y, w, h)
+    bevelBox(x, y, w, h, active)
+    love.graphics.setColor(cfg.COL_UI_TEXT)
+    local tw = love.graphics.getFont():getWidth(text)
+    local th = love.graphics.getFont():getHeight()
+    love.graphics.print(text, x + (w - tw)/2, y + (h - th)/2)
+end
+
+-- ========== TOOL & HOVER GETTERS ==========
 function ui.getActiveTool()
     return activeTool
 end
@@ -35,144 +54,130 @@ function ui.setActiveTool(tool)
 end
 
 function ui.getDragRect()
-    if not isDraggingBuild or not dragBuildStart or not dragBuildCurrent then
-        return nil
-    end
-    if not dragBuildStart[1] or not dragBuildStart[2] or not dragBuildCurrent[1] or not dragBuildCurrent[2] then
-        return nil
-    end
-    local x1 = math.min(dragBuildStart[1], dragBuildCurrent[1])
-    local y1 = math.min(dragBuildStart[2], dragBuildCurrent[2])
-    local x2 = math.max(dragBuildStart[1], dragBuildCurrent[1])
-    local y2 = math.max(dragBuildStart[2], dragBuildCurrent[2])
-    return {x1=x1, y1=y1, x2=x2, y2=y2}
+    if not isDraggingBuild or not dragBuildStart or not dragBuildCurrent then return nil end
+    if not dragBuildStart[1] or not dragBuildStart[2] or not dragBuildCurrent[1] or not dragBuildCurrent[2] then return nil end
+    return {
+        x1 = math.min(dragBuildStart[1], dragBuildCurrent[1]),
+        y1 = math.min(dragBuildStart[2], dragBuildCurrent[2]),
+        x2 = math.max(dragBuildStart[1], dragBuildCurrent[1]),
+        y2 = math.max(dragBuildStart[2], dragBuildCurrent[2]),
+    }
 end
 
 function ui.getHoverTile()
-    if activeTool == cfg.TOOL_NONE or isDraggingBuild then
-        return nil
-    end
-    if not hoverTileX or not hoverTileY then
-        return nil
-    end
-    return {x=hoverTileX, y=hoverTileY}
+    if activeTool == cfg.TOOL_NONE or isDraggingBuild then return nil end
+    if not hoverTileX or not hoverTileY then return nil end
+    return {x = hoverTileX, y = hoverTileY}
 end
 
+-- ========== MOUSE HANDLERS ==========
 function ui.mousepressed(mx, my, button)
     if button ~= 1 then return end
 
+    -- Pause button (status bar)
+    local pauseW, pauseH = 60, 16
+    local pauseX = cfg.WINDOW_WIDTH - pauseW - 10
+    local pauseY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT + 4
+    if mx >= pauseX and mx <= pauseX + pauseW and my >= pauseY and my <= pauseY + pauseH then
+        game.togglePauseState()
+        return
+    end
+
+    -- Right panel click (check buttons)
     if mx >= cfg.GAME_WIDTH then
+        local bx = cfg.GAME_WIDTH + 10
+        local by = 10
+        local bw = cfg.TOOL_PANEL_WIDTH - 20
+        local bh = 22
         for _, btn in ipairs(buttons) do
-            if mx >= btn.bx and mx <= btn.bx+btn.bw and
-               my >= btn.by and my <= btn.by+btn.bh then
-                if btn.action then btn.action() end
+            if mx >= btn.x and mx <= btn.x+btn.w and my >= btn.y and my <= btn.y+btn.h then
+                if btn.action then btn.action() else activeTool = btn.tool end
                 return
             end
         end
+        -- Slider handling
         for _, sld in ipairs(sliders) do
-            if mx >= sld.sx and mx <= sld.sx+sld.sw and
-               my >= sld.sy-5 and my <= sld.sy+sld.sh+5 then
+            if mx >= sld.x and mx <= sld.x+sld.w and my >= sld.y-5 and my <= sld.y+sld.h+5 then
                 sliderDrag = sld
                 return
             end
         end
-    else
-        if activeTool == cfg.TOOL_NONE then
-            dragStart = {x = mx, y = my}
-            dragging = true
-        elseif activeTool == cfg.TOOL_BUILD or activeTool == cfg.TOOL_REMOVE then
-            local wx, wy = camera.screenToWorld(mx, my)
-            local tileX, tileY = map.worldToTile(wx, wy)
-            if tileX and tileY and tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
-                dragBuildStart = {tileX, tileY}
-                dragBuildCurrent = {tileX, tileY}
-                isDraggingBuild = true
-            end
+        return
+    end
+
+    -- Game world click
+    if activeTool == cfg.TOOL_NONE then
+        dragStart = {x = mx, y = my}
+        dragging = true
+    elseif activeTool == cfg.TOOL_BUILD or activeTool == cfg.TOOL_REMOVE then
+        local wx, wy = camera.screenToWorld(mx, my)
+        local tx, ty = map.worldToTile(wx, wy)
+        if tx and ty and tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
+            dragBuildStart = {tx, ty}
+            dragBuildCurrent = {tx, ty}
+            isDraggingBuild = true
         end
     end
 end
 
 function ui.mousereleased(mx, my, button)
-    if button == 1 then
-        if isDraggingBuild then
-            local rect = ui.getDragRect()
-            if rect then
-                local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
-
-                -- Calculate drag direction for delay computation
-                local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
-                local endTX, endTY = dragBuildCurrent[1], dragBuildCurrent[2]
-                local dirX = endTX - startTX
-                local dirY = endTY - startTY
-                local maxDist = math.sqrt(dirX*dirX + dirY*dirY)
-                if maxDist == 0 then maxDist = 1 end
-
-                local maxDelay = 0.4
-                for x = rect.x1, rect.x2 do
-                    for y = rect.y1, rect.y2 do
-                        if fillType == cfg.FLOOR then
-                            if map.isBuildable(x, y) then
-                                map.setTile(x, y, fillType)
-                                local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
-                                local delay = (proj + 0.5) * maxDelay
-                                delay = math.max(0, math.min(delay, maxDelay))
-                                effects.addTileFadeIn(x, y, delay)
-                                game.witnessTileChange(x, y)
-                            end
-                        else
-                            if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
-                                local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
-                                map.setTile(x, y, fillType)
-                                game.clearTile(x, y)
-                                local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
-                                local delay = (proj + 0.5) * maxDelay
-                                delay = math.max(0, math.min(delay, maxDelay))
-                                effects.addTileFadeOut(x, y, lightLevel, delay)
-                                game.witnessTileChange(x, y)
-                            end
-                        end
+    if button ~= 1 then return end
+    if isDraggingBuild then
+        local rect = ui.getDragRect()
+        if rect then
+            local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
+            local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
+            local endTX, endTY = dragBuildCurrent[1], dragBuildCurrent[2]
+            local dirX = endTX - startTX
+            local dirY = endTY - startTY
+            local maxDist = math.sqrt(dirX*dirX + dirY*dirY)
+            if maxDist == 0 then maxDist = 1 end
+            local maxDelay = 0.4
+            for x = rect.x1, rect.x2 do
+                for y = rect.y1, rect.y2 do
+                    if fillType == cfg.FLOOR and map.isBuildable(x, y) then
+                        map.setTile(x, y, fillType)
+                        local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                        local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
+                        effects.addTileFadeIn(x, y, delay)
+                        game.witnessTileChange(x, y)
+                    elseif fillType == cfg.VOID and map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                        local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
+                        map.setTile(x, y, fillType)
+                        game.clearTile(x, y)
+                        local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                        local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
+                        effects.addTileFadeOut(x, y, lightLevel, delay)
+                        game.witnessTileChange(x, y)
                     end
                 end
-                game.computeLighting()
-                audio.playBuildSound()
             end
-            isDraggingBuild = false
-            dragBuildStart = nil
-            dragBuildCurrent = nil
-        else
-            -- Single click for other tools
-            local wx, wy = camera.screenToWorld(mx, my)
-            local tileX, tileY = map.worldToTile(wx, wy)
-            if tileX and tileY then
-                if activeTool == cfg.TOOL_LAMP or activeTool == cfg.TOOL_ENTITY then
-                    if map.isWalkable(tileX, tileY) then
-                        local px, py = map.tileToWorld(tileX, tileY)
-                        if activeTool == cfg.TOOL_LAMP then
-                            game.addComfort(px, py)
-                            audio.playLampPlaceSound()
-                        else
-                            game.addEntity(px, py)
-                            audio.playEntityPlaceSound()
-                        end
-                    end
-                elseif activeTool == cfg.TOOL_FOOD then
-                    if map.isWalkable(tileX, tileY) then
-                        local px, py = map.tileToWorld(tileX, tileY)
-                        game.addFood(px, py)
-                        -- audio.playFoodPlaceSound() -- uncomment when sound available
-                    end
-                elseif activeTool == cfg.TOOL_EXIT then
-                    if map.isWalkable(tileX, tileY) then
-                        local px, py = map.tileToWorld(tileX, tileY)
-                        game.addExit(px, py)
-                        -- audio.playExitPlaceSound() -- uncomment when sound available
-                    end
-                end
+            game.computeLighting()
+            audio.playBuildSound()
+        end
+        isDraggingBuild = false
+        dragBuildStart = nil
+        dragBuildCurrent = nil
+    else
+        local wx, wy = camera.screenToWorld(mx, my)
+        local tx, ty = map.worldToTile(wx, wy)
+        if tx and ty and map.isWalkable(tx, ty) then
+            local px, py = map.tileToWorld(tx, ty)
+            if activeTool == cfg.TOOL_LAMP then
+                game.addComfort(px, py)
+                audio.playLampPlaceSound()
+            elseif activeTool == cfg.TOOL_ENTITY then
+                game.addEntity(px, py)
+                audio.playEntityPlaceSound()
+            elseif activeTool == cfg.TOOL_FOOD then
+                game.addFood(px, py)
+            elseif activeTool == cfg.TOOL_EXIT then
+                game.addExit(px, py)
             end
         end
-        dragging = false
-        sliderDrag = nil
     end
+    dragging = false
+    sliderDrag = nil
 end
 
 function ui.mousemoved(mx, my, dx, dy)
@@ -184,16 +189,16 @@ function ui.mousemoved(mx, my, dx, dy)
     end
     if sliderDrag then
         local sld = sliderDrag
-        local frac = (mx - sld.sx) / sld.sw
+        local frac = (mx - sld.x) / sld.w
         frac = math.max(0, math.min(1, frac))
-        local value = sld.min + frac * (sld.max - sld.min)
-        sld.setter(value)
+        local val = sld.min + frac * (sld.max - sld.min)
+        sld.setter(val)
     end
     if isDraggingBuild then
         local wx, wy = camera.screenToWorld(mx, my)
-        local tileX, tileY = map.worldToTile(wx, wy)
-        if tileX and tileY and tileX >= 1 and tileX <= cfg.MAP_COLS and tileY >= 1 and tileY <= cfg.MAP_ROWS then
-            dragBuildCurrent = {tileX, tileY}
+        local tx, ty = map.worldToTile(wx, wy)
+        if tx and ty and tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
+            dragBuildCurrent = {tx, ty}
         end
     end
     if not isDraggingBuild and activeTool ~= cfg.TOOL_NONE then
@@ -215,179 +220,166 @@ end
 
 function ui.wheelmoved(x, y)
     local zoomFactor = 1.1
-    if y > 0 then
-        camera.zoom = math.min(2, camera.zoom * zoomFactor)
-    else
-        camera.zoom = math.max(0.5, camera.zoom / zoomFactor)
-    end
+    if y > 0 then camera.zoom = math.min(2, camera.zoom * zoomFactor)
+    else camera.zoom = math.max(0.5, camera.zoom / zoomFactor) end
 end
 
+-- ========== DRAWING ==========
 function ui.draw(efficiency, denizenCount)
-    love.graphics.setColor(cfg.COL_UI_BG)
-    love.graphics.rectangle("fill", cfg.GAME_WIDTH, 0, cfg.PANEL_WIDTH, cfg.WINDOW_HEIGHT)
+    local panelX = cfg.GAME_WIDTH
 
-    local x = cfg.GAME_WIDTH + 10
+    -- ====== BOTTOM STATUS BAR (full width) ======
+    local sbY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT
+    love.graphics.setColor(cfg.COL_UI_BG)
+    love.graphics.rectangle("fill", 0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT)
+    bevelBox(0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT, true)
+
+    -- Familiarity / Unease / Dread bars
+    local barX = 10
+    local barW = (cfg.WINDOW_WIDTH - 30) / 3
+    local barH = 10
+    local barY = sbY + 4
+
+    -- Familiarity
+    love.graphics.setColor(0.2, 0.6, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barW * game.familiarity, barH)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barW, barH)
+    love.graphics.print("Familiarity", barX, barY + barH + 2)
+
+    -- Unease
+    barX = barX + barW + 5
+    love.graphics.setColor(0.6, 0.6, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barW * game.unease, barH)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barW, barH)
+    love.graphics.print("Unease", barX, barY + barH + 2)
+
+    -- Dread
+    barX = barX + barW + 5
+    love.graphics.setColor(0.6, 0.2, 0.2)
+    love.graphics.rectangle("fill", barX, barY, barW * game.dread, barH)
+    love.graphics.setColor(1,1,1)
+    love.graphics.rectangle("line", barX, barY, barW, barH)
+    love.graphics.print("Dread", barX, barY + barH + 2)
+
+    -- Denizen count & efficiency
+    local sx = cfg.WINDOW_WIDTH - 200
+    love.graphics.setColor(cfg.COL_UI_TEXT)
+    love.graphics.print("Denizens: " .. denizenCount .. "  Eff: " .. efficiency .. "%", sx, sbY + 6)
+
+    -- Pause button
+    local pauseW, pauseH = 60, 16
+    local pauseX = cfg.WINDOW_WIDTH - pauseW - 10
+    local pauseY = sbY + 4
+    bevelButton(pauseX, pauseY, pauseW, pauseH, game.paused and "Resume" or "Pause", false)
+
+    -- ====== RIGHT PANEL (tools & entity editor) ======
+    love.graphics.setColor(cfg.COL_UI_BG)
+    love.graphics.rectangle("fill", panelX, 0, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT)
+    bevelBox(panelX, 0, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT, true)
+
+    local x = panelX + 10
     local y = 10
 
-    -- Resource bars
-    local barWidth = cfg.PANEL_WIDTH - 20
-    local barHeight = 12
-    local barX = x
-    local barY = y + 10
-
-    love.graphics.setColor(0.2, 0.6, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barWidth * game.familiarity, barHeight)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
-    love.graphics.print("Familiarity", barX, barY - 15)
-    barY = barY + barHeight + 8
-
-    love.graphics.setColor(0.6, 0.6, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barWidth * game.unease, barHeight)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
-    love.graphics.print("Unease", barX, barY - 15)
-    barY = barY + barHeight + 8
-
-    love.graphics.setColor(0.6, 0.2, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barWidth * game.dread, barHeight)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
-    love.graphics.print("Dread", barX, barY - 15)
-    barY = barY + barHeight + 15
-
-    y = barY
-
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Despair Efficiency: " .. efficiency .. "%", x, y)
-    y = y + 25
-    love.graphics.print("Denizens: " .. denizenCount, x, y)
-    y = y + 40
-    love.graphics.print("Tool:", x, y)
+    -- Tool heading
+    love.graphics.setColor(cfg.COL_UI_TEXT)
+    love.graphics.print("TOOLS", x, y)
     y = y + 20
 
+    -- Clear tables
     buttons = {}
     sliders = {}
 
-    local function addButton(text, tool, action)
-        local bx, by = x, y
-        local bw, bh = 100, 24
-        local active = (activeTool == tool)
-        love.graphics.setColor(active and {0.47, 0.47, 0.33} or {0.27, 0.27, 0.27})
-        love.graphics.rectangle("fill", bx, by, bw, bh)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(text, bx+5, by+4)
-        table.insert(buttons, {bx=bx, by=by, bw=bw, bh=bh, action = action or function() activeTool = tool end})
-        y = y + 28
+    -- Button width
+    local bw = cfg.TOOL_PANEL_WIDTH - 20
+
+    -- Tool buttons
+    local toolDefs = {
+        { "None", cfg.TOOL_NONE },
+        { "Lamp", cfg.TOOL_LAMP },
+        { "Entity", cfg.TOOL_ENTITY },
+        { "Build", cfg.TOOL_BUILD },
+        { "Remove", cfg.TOOL_REMOVE },
+        { "Food", cfg.TOOL_FOOD },
+        { "Exit", cfg.TOOL_EXIT },
+    }
+    for _, def in ipairs(toolDefs) do
+        local bh = 20
+        bevelButton(x, y, bw, bh, def[1], activeTool == def[2])
+        table.insert(buttons, {x=x, y=y, w=bw, h=bh, tool=def[2]})
+        y = y + 26
     end
 
-    addButton("None", cfg.TOOL_NONE)
-    addButton("Lamp", cfg.TOOL_LAMP)
-    addButton("Entity", cfg.TOOL_ENTITY)
-    addButton("Build", cfg.TOOL_BUILD)
-    addButton("Remove", cfg.TOOL_REMOVE)
-    addButton("Food", cfg.TOOL_FOOD)
-    addButton("Exit", cfg.TOOL_EXIT)
+    -- Save / Load
+    y = y + 10
+    bevelButton(x, y, bw, 20, "Save", false)
+    table.insert(buttons, {x=x, y=y, w=bw, h=20, action = function() game.save() end})
+    y = y + 24
+    bevelButton(x, y, bw, 20, "Load", false)
+    table.insert(buttons, {x=x, y=y, w=bw, h=20, action = function() game.load() end})
 
-    y = y + 15
-    addButton("Save", nil, function() game.save() end)
-    addButton("Load", nil, function() game.load() end)
-    addButton(game.paused and "Resume" or "Pause", nil, function()
-        game.togglePauseState()
-    end)
+    -- Entity Editor
+    y = y + 20
+    love.graphics.setColor(cfg.COL_UI_TEXT)
+    love.graphics.print("ENTITY EDITOR", x, y)
+    y = y + 20
 
-    y = y + 15
-    love.graphics.print("Entity Editor", x, y)
-    y = y + 35
-
-    local function addSlider(label, min, max, getVal, setVal)
-        local sx, sy = x, y
-        local sw, sh = 200, 20
-        local val = getVal() or 0
-        love.graphics.setColor(0.5, 0.5, 0.5)
-        love.graphics.rectangle("fill", sx, sy, sw, sh)
+    local function addSlider(label, min, max, getter, setter)
+        local sw = bw
+        local sh = 16
+        local val = getter() or 0
+        love.graphics.setColor(0.4, 0.4, 0.4)
+        love.graphics.rectangle("fill", x, y, sw, sh)
         local frac = (val - min) / (max - min)
-        local handleX = sx + frac * sw
-        love.graphics.setColor(0.8, 0.8, 0.8)
-        love.graphics.circle("fill", handleX, sy + sh/2, 5)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(label .. ": " .. string.format("%.2f", val), sx, sy-15)
-        table.insert(sliders, {sx=sx, sy=sy, sw=sw, sh=sh, min=min, max=max, setter=setVal})
-        y = y + 30
+        local handleX = x + frac * sw
+        love.graphics.setColor(1,1,1)
+        love.graphics.circle("fill", handleX, y + sh/2, 5)
+        love.graphics.print(label .. ": " .. string.format("%.2f", val), x, y - 12)
+        table.insert(sliders, {x=x, y=y, w=sw, h=sh, min=min, max=max, setter=setter})
+        y = y + sh + 14
     end
 
-    addSlider("Speed", 20, 150,
-        function() return game.entityTemplate.speed end,
-        function(v) game.entityTemplate.speed = v end)
-    addSlider("Radius", 40, 250,
-        function() return game.entityTemplate.radius end,
-        function(v) game.entityTemplate.radius = v end)
-    addSlider("Despair/s", 0.01, 0.2,
-        function() return game.entityTemplate.despairPerSec end,
-        function(v) game.entityTemplate.despairPerSec = v end)
-    addSlider("Aggression", 0, 1,
-        function() return game.entityTemplate.aggression end,
-        function(v) game.entityTemplate.aggression = v end)
-    addSlider("Light Avoid", -1, 1,
-        function() return game.entityTemplate.lightAvoidance end,
-        function(v) game.entityTemplate.lightAvoidance = v end)
-    addSlider("Hearing", 50, 600,
-        function() return game.entityTemplate.hearingRange end,
-        function(v) game.entityTemplate.hearingRange = v end)
+    addSlider("Speed", 20, 150, function() return game.entityTemplate.speed end, function(v) game.entityTemplate.speed = v end)
+    addSlider("Radius", 40, 250, function() return game.entityTemplate.radius end, function(v) game.entityTemplate.radius = v end)
+    addSlider("Despair/s", 0.01, 0.2, function() return game.entityTemplate.despairPerSec end, function(v) game.entityTemplate.despairPerSec = v end)
+    addSlider("Aggression", 0, 1, function() return game.entityTemplate.aggression end, function(v) game.entityTemplate.aggression = v end)
+    addSlider("Light Avoid", -1, 1, function() return game.entityTemplate.lightAvoidance end, function(v) game.entityTemplate.lightAvoidance = v end)
+    addSlider("Hearing", 50, 600, function() return game.entityTemplate.hearingRange end, function(v) game.entityTemplate.hearingRange = v end)
 
-    y = y + 5
-    love.graphics.setColor(0.27, 0.27, 0.27)
-    love.graphics.rectangle("fill", x, y, 120, 24)
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.print("Save Template", x+5, y+4)
-
-    y = y + 40
-    love.graphics.setColor(0.6, 0.6, 0.6)
-    love.graphics.print("Drag map to explore.\nScroll to zoom.", x, y)
-
-    -- Tooltip for hovered object
+    -- ====== HOVERED OBJECT TOOLTIP (pop-up near mouse) ======
     local hovered = game.hoveredObject
     if hovered then
-        y = y + 10
-        love.graphics.setColor(1, 1, 1, 0.9)
+        local mx, my = love.mouse.getPosition()
+        local tipW, tipH = 130, 80
+        local tipX = mx + 16
+        local tipY = my + 16
+        -- clamp to game area (right panel excluded)
+        if tipX + tipW > cfg.GAME_WIDTH then tipX = mx - tipW - 16 end
+        if tipY + tipH > cfg.GAME_HEIGHT then tipY = my - tipH - 16 end
+
+        love.graphics.setColor(cfg.COL_UI_BG)
+        love.graphics.rectangle("fill", tipX, tipY, tipW, tipH)
+        bevelBox(tipX, tipY, tipW, tipH, false)
+        love.graphics.setColor(cfg.COL_UI_TEXT)
+
         if hovered.type == "entity" then
             local e = hovered.data
-            love.graphics.print("Entity", x, y)
-            y = y + 16
-            love.graphics.print("State: " .. (e.state or "unknown"), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Speed: %.0f", e.speed), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Radius: %.0f", e.radius), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Despair/s: %.2f", e.despairPerSec), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Aggression: %.2f", e.aggression), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Light Avoid: %.2f", e.lightAvoidance), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Hearing: %.0f", e.hearingRange), x, y)
-            y = y + 16
+            love.graphics.print("Entity", tipX+4, tipY+4)
+            love.graphics.print("State: " .. (e.state or "?"), tipX+4, tipY+18)
+            love.graphics.print(string.format("Spd:%.0f Rad:%.0f", e.speed, e.radius), tipX+4, tipY+32)
+            love.graphics.print(string.format("Desp/s:%.2f Agg:%.2f", e.despairPerSec, e.aggression), tipX+4, tipY+46)
         elseif hovered.type == "denizen" then
             local d = hovered.data
-            love.graphics.print("Denizen", x, y)
-            y = y + 16
-            love.graphics.print(string.format("State: %s", d.state), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Despair: %.2f", d.profile.despair), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Anxiety: %.2f", d.profile.anxiety), x, y)
-            y = y + 16
-            love.graphics.print(string.format("Speed: %.0f", d.profile.speed), x, y)
-            y = y + 16
+            love.graphics.print("Denizen", tipX+4, tipY+4)
+            love.graphics.print("State: " .. d.state, tipX+4, tipY+18)
+            love.graphics.print(string.format("Desp:%.2f Anx:%.2f", d.profile.despair, d.profile.anxiety), tipX+4, tipY+32)
+            love.graphics.print(string.format("Speed:%.0f", d.profile.speed), tipX+4, tipY+46)
         elseif hovered.type == "food" then
-            love.graphics.print("Food", x, y)
-            y = y + 16
+            love.graphics.print("Food", tipX+4, tipY+4)
         elseif hovered.type == "exit" then
-            love.graphics.print("Exit", x, y)
-            y = y + 16
+            love.graphics.print("Exit", tipX+4, tipY+4)
         end
-        y = y + 5
     end
 end
 

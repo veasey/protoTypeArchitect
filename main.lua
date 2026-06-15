@@ -40,11 +40,18 @@ function love.keypressed(key)
 end
 
 function love.draw()
+    -- Game world (with CRT)
+    love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
     postfx.beginCapture()
     draw.world()
-    ui.draw(game.getEfficiency(), #game.denizens)
     postfx.endCapture()
+    love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
     postfx.apply(love.timer.getDelta())
+
+    -- UI (crisp, no CRT)
+    love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT)
+    ui.draw(game.getEfficiency(), #game.denizens)
+    love.graphics.setScissor()
 end
 
 function love.mousepressed(x, y, button, istouch, presses)

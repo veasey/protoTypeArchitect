@@ -108,4 +108,18 @@ config.WITNESS_SIGHT_RANGE      = 200
 -- Fear
 config.FEAR_DURATION = 5
 
+-- Retro UI
+config.STATUSBAR_HEIGHT = 28
+config.TOOL_PANEL_WIDTH = 240   -- a bit narrower
+config.GAME_WIDTH = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
+config.GAME_HEIGHT = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT
+
+-- Bevel colours (simulate 3D)
+config.COL_UI_BEVEL_HI = {0.6, 0.6, 0.6}
+config.COL_UI_BEVEL_LO = {0.1, 0.1, 0.1}
+config.COL_UI_BG        = {0.17, 0.17, 0.17}
+config.COL_UI_TEXT      = {0.8, 0.8, 0.8}
+config.COL_UI_BUTTON    = {0.3, 0.3, 0.3}
+config.COL_UI_BUTTON_HI = {0.45, 0.45, 0.3}  -- selected
+
 return config
