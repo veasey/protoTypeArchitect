@@ -1,23 +1,36 @@
-
-
 local config = {}
 
-config.TILE_SIZE = 32
-config.MAP_COLS   = 80
-config.MAP_ROWS   = 60
-config.WORLD_WIDTH  = config.MAP_COLS * config.TILE_SIZE
-config.WORLD_HEIGHT = config.MAP_ROWS * config.TILE_SIZE
+-- ============================================================
+--  WINDOW & TILE DIMENSIONS
+-- ============================================================
+config.TILE_SIZE       = 32
+config.MAP_COLS        = 80
+config.MAP_ROWS        = 60
+config.WORLD_WIDTH     = config.MAP_COLS * config.TILE_SIZE
+config.WORLD_HEIGHT    = config.MAP_ROWS * config.TILE_SIZE
 
-config.WINDOW_WIDTH  = 1200
-config.WINDOW_HEIGHT = 800
-config.PANEL_WIDTH   = 280
-config.GAME_WIDTH    = config.WINDOW_WIDTH - config.PANEL_WIDTH
+config.WINDOW_WIDTH    = 1200
+config.WINDOW_HEIGHT   = 800
 
--- Tile types
-config.VOID  = 0
-config.FLOOR = 1
+-- ============================================================
+--  UI LAYOUT (menu bar, tool panel, status bar)
+-- ============================================================
+config.MENUBAR_HEIGHT  = 36
+config.TOOL_PANEL_WIDTH = 240
+config.STATUSBAR_HEIGHT = 28
 
--- Tool modes
+config.GAME_WIDTH      = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
+config.GAME_HEIGHT     = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT - config.MENUBAR_HEIGHT
+
+-- ============================================================
+--  TILE TYPES
+-- ============================================================
+config.VOID   = 0
+config.FLOOR  = 1
+
+-- ============================================================
+--  TOOL MODES
+-- ============================================================
 config.TOOL_NONE   = "none"
 config.TOOL_LAMP   = "lamp"
 config.TOOL_ENTITY = "entity"
@@ -26,26 +39,34 @@ config.TOOL_REMOVE = "remove"
 config.TOOL_FOOD   = "food"
 config.TOOL_EXIT   = "exit"
 
+-- ============================================================
+--  STARTING ROOM
+-- ============================================================
 config.START_ROOM_RADIUS = 2
 
--- ===== DENIZEN BEHAVIOR CONFIG =====
+-- ============================================================
+--  SPAWNING & AI INTERVALS
+-- ============================================================
+config.SPAWN_INTERVAL        = 15
+config.AI_INTERVAL           = 0.2
+config.DENIZEN_SPAWN_MIN_LIGHT = 0.3
 
--- Spawning / AI
-config.SPAWN_INTERVAL   = 15
-config.AI_INTERVAL      = 0.2
+-- ============================================================
+--  DENIZEN BEHAVIOUR
+-- ============================================================
+config.HIDING_DURATION         = 1.5
+config.HIDE_COOLDOWN_DURATION  = 5
+config.HIDING_DESPAIR_MULT     = 0.3
 
-config.DENIZEN_SPAWN_MIN_LIGHT = 0.3    -- light level required for a spawn tile
-config.HIDING_DURATION = 1.5            -- seconds before a denizen gives up hiding
-config.HIDE_COOLDOWN_DURATION = 5       -- seconds before a denizen can hide again
-config.HIDING_DESPAIR_MULT     = 0.3   -- despair multiplier while hiding
+config.DENIZEN_SIGHT_RANGE     = 100
+config.AVOID_DESPAIR_THRESHOLD = 0.5
+config.AVOID_LOOK_AHEAD        = 1.0
+config.AVOID_STRENGTH          = 2.0
+config.FEAR_DURATION           = 5
 
--- Denizen avoidance: they avoid entity despair zones when their despair is high
-config.DENIZEN_SIGHT_RANGE = 100
-config.AVOID_DESPAIR_THRESHOLD = 0.5   -- above this despair, start avoiding
-config.AVOID_LOOK_AHEAD = 1.0          -- seconds of movement to check ahead
-config.AVOID_STRENGTH = 2.0            -- rotation force per entity (radians)
-config.FEAR_DURATION = 5   -- seconds denizen keeps fleeing after losing sight of chaser
-
+-- ============================================================
+--  DESPAIR & COMFORT
+-- ============================================================
 config.BASE_DESPAIR_RATE   = 0.02
 config.COMFORT_CLOSE       = 80
 config.COMFORT_FAR         = 150
@@ -56,80 +77,80 @@ config.DESPAIR_MAX         = 0.95
 config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
 
+-- ============================================================
+--  ENTITY DEFAULTS (placed entities start with these)
+-- ============================================================
 config.ENTITY_DEFAULTS = {
     speed          = 50,
     radius         = 100,
     despairPerSec  = 0.05,
-    aggression     = 1,    -- 0 = never chase, 1 = always chase within radius
-    lightAvoidance = -1,    -- -1 = flee light, 0 = neutral, +1 = seek light
-    hearingRange   = 300,    -- per-entity hearing range (pixels)
+    aggression     = 1,           -- 0 = never chase, 1 = always chase within radius
+    lightAvoidance = -1,          -- -1 = flee light, 0 = neutral, +1 = seek light
+    hearingRange   = 300,         -- per‑entity hearing range (pixels)
 }
 
--- Colours
+-- ============================================================
+--  WITNESS REACTIONS (denizens seeing tile changes)
+-- ============================================================
+config.WITNESS_ANXIETY_SPIKE = 0.4
+config.WITNESS_DESPAIR_SPIKE = 0.3
+config.WITNESS_SIGHT_RANGE   = 200
+
+-- ============================================================
+--  RESOURCE LOOP (Familiarity, Unease, Dread)
+-- ============================================================
+config.FAMILIARITY_SPAWN_MULT = 2.0
+config.UNEASE_SPEED_BOOST     = 0.5
+config.ANXIETY_LIGHT_RECOVERY = 0.1
+config.ANXIETY_DARK_GAIN      = 0.2
+config.DREAD_SPAWN_THRESHOLD  = 0.6
+config.DREAD_SPAWN_INTERVAL   = 10
+config.DREAD_SPAWN_CHANCE     = 0.5
+config.DREAD_SPAWN_MIN_LIGHT  = 0.1
+
+-- ============================================================
+--  FOOD (reduces despair & anxiety)
+-- ============================================================
+config.FOOD_RADIUS            = 60
+config.FOOD_DESPAIR_REDUCTION = 0.05
+config.FOOD_ANXIETY_REDUCTION = 0.05
+
+-- ============================================================
+--  EXITS (denizens escape here)
+-- ============================================================
+config.EXIT_DETECTION_RANGE   = 250
+config.EXIT_ESCAPE_DISTANCE   = 20
+config.EXIT_FAMILIARITY_BOOST = 0.1
+
+-- ============================================================
+--  LIGHTING
+-- ============================================================
+config.LIGHT_DECAY_PER_TILE = 0.25
+config.LIGHT_MIN_AMBIENT    = 0.03
+
+-- ============================================================
+--  COLOURS
+-- ============================================================
 config.COL_VOID    = {0.05, 0.05, 0.08}
 config.COL_FLOOR   = {0.78, 0.71, 0.55}
 config.COL_LAMP    = {0.91, 0.78, 0.38}
 config.COL_ENTITY  = {0.4, 0.27, 0.53}
 config.COL_ENTITY_RADIUS = {0.4, 0.27, 0.53, 0.2}
-config.COL_UI_BG   = {0.17, 0.17, 0.17}
 
 config.DENIZEN_COLOR_LOW  = {0.53, 0.67, 0.8}
 config.DENIZEN_COLOR_HIGH = {0.8, 0.2, 0.2}
 
--- Witness
-config.WITNESS_ANXIETY_SPIKE    = 0.4
-config.WITNESS_DESPAIR_SPIKE    = 0.3
-config.WITNESS_SIGHT_RANGE      = 200
-
--- Fear
-config.FEAR_DURATION = 5
-
--- Resource loop
-config.FAMILIARITY_SPAWN_MULT   = 2.0
-config.UNEASE_SPEED_BOOST       = 0.5
-config.ANXIETY_LIGHT_RECOVERY   = 0.1
-config.ANXIETY_DARK_GAIN        = 0.2
-config.DREAD_SPAWN_THRESHOLD    = 0.6
-config.DREAD_SPAWN_INTERVAL     = 10
-config.DREAD_SPAWN_CHANCE       = 0.5
-config.DREAD_SPAWN_MIN_LIGHT    = 0.1
-
--- Food
-config.FOOD_RADIUS              = 60
-config.FOOD_DESPAIR_REDUCTION   = 0.05
-config.FOOD_ANXIETY_REDUCTION   = 0.05
-
--- Exit
-config.EXIT_DETECTION_RANGE     = 250
-config.EXIT_ESCAPE_DISTANCE     = 20
-config.EXIT_FAMILIARITY_BOOST   = 0.1
-
--- Lighting
-config.LIGHT_DECAY_PER_TILE = 0.25
-config.LIGHT_MIN_AMBIENT    = 0.03
-
-
--- ==== Retro UI ====
-config.STATUSBAR_HEIGHT = 28
-config.TOOL_PANEL_WIDTH = 240   -- a bit narrower
-config.GAME_WIDTH = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
-config.GAME_HEIGHT = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT
-
--- Bevel colours (simulate 3D)
-config.COL_UI_BEVEL_HI = {0.6, 0.6, 0.6}
-config.COL_UI_BEVEL_LO = {0.1, 0.1, 0.1}
-config.COL_UI_BG        = {0.17, 0.17, 0.17}
-config.COL_UI_TEXT      = {0.8, 0.8, 0.8}
-config.COL_UI_BUTTON    = {0.3, 0.3, 0.3}
-config.COL_UI_BUTTON_HI = {0.45, 0.45, 0.3}  -- selected
-
--- Menu bar
-config.MENUBAR_HEIGHT = 36
-config.GAME_HEIGHT = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT - config.MENUBAR_HEIGHT
+-- UI colours
+config.COL_UI_BG         = {0.17, 0.17, 0.17}
+config.COL_UI_TEXT       = {0.8, 0.8, 0.8}
+config.COL_UI_BUTTON     = {0.3, 0.3, 0.3}
+config.COL_UI_BUTTON_HI  = {0.45, 0.45, 0.3}   -- selected / hover
+config.COL_UI_BEVEL_HI   = {0.6, 0.6, 0.6}     -- bevel light edge
+config.COL_UI_BEVEL_LO   = {0.1, 0.1, 0.1}     -- bevel dark edge
 
 -- Slider style
 config.SLIDER_TRACK_COLOR = {0.4, 0.4, 0.4}
-config.SLIDER_HANDLE_W = 12
+config.SLIDER_HANDLE_W    = 12
 config.SLIDER_HANDLE_COLOR = {0.6, 0.6, 0.6}
 
 return config
