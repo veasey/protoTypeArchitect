@@ -9,7 +9,7 @@ local audio   = require("audio")
 local ui = {}
 
 -- ========== STATE ==========
-local buttons = {}        -- right-panel buttons
+local buttons = {}        -- right‑panel buttons
 local sliders = {}        -- entity editor sliders
 local sliderDrag = nil
 local dragStart = nil
@@ -20,6 +20,10 @@ local dragBuildStart = nil
 local dragBuildCurrent = nil
 local isDraggingBuild = false
 local hoverTileX, hoverTileY = nil, nil
+
+-- Menu state
+local menuOpen = false    -- true when File menu is open
+ui.mouseX, ui.mouseY = 0, 0   -- updated in mousemoved
 
 -- ========== DRAWING HELPERS ==========
 local function bevelBox(x, y, w, h, sunken)
@@ -74,7 +78,45 @@ end
 function ui.mousepressed(mx, my, button)
     if button ~= 1 then return end
 
-    -- Pause button (status bar)
+    -- ==== Dropdown menu items (if open) – first priority ====
+    if menuOpen then
+        local fileBtnX = 5
+        local dropdownX = fileBtnX
+        local dropdownY = cfg.MENUBAR_HEIGHT
+        local dropdownW = 120
+        local itemH = 20
+        local items = {"Save", "Load", "Exit"}
+        for i, item in ipairs(items) do
+            local iy = dropdownY + (i-1) * itemH
+            if mx >= dropdownX and mx <= dropdownX + dropdownW and my >= iy and my <= iy + itemH then
+                if item == "Save" then
+                    game.save()
+                elseif item == "Load" then
+                    game.load()
+                elseif item == "Exit" then
+                    love.event.quit()
+                end
+                menuOpen = false
+                return
+            end
+        end
+        -- Clicked outside the dropdown → close it
+        menuOpen = false
+        return
+    end
+
+    -- ==== Menu bar (top) – File button ====
+    if my <= cfg.MENUBAR_HEIGHT then
+        local fileBtnX = 5
+        local fileBtnW = 50
+        if mx >= fileBtnX and mx <= fileBtnX + fileBtnW then
+            menuOpen = true
+            return
+        end
+        return
+    end
+
+    -- ==== Pause button (status bar) ====
     local pauseW, pauseH = 60, 16
     local pauseX = cfg.WINDOW_WIDTH - pauseW - 10
     local pauseY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT + 4
@@ -83,19 +125,14 @@ function ui.mousepressed(mx, my, button)
         return
     end
 
-    -- Right panel click (check buttons)
+    -- ==== Right panel click ====
     if mx >= cfg.GAME_WIDTH then
-        local bx = cfg.GAME_WIDTH + 10
-        local by = 10
-        local bw = cfg.TOOL_PANEL_WIDTH - 20
-        local bh = 22
         for _, btn in ipairs(buttons) do
             if mx >= btn.x and mx <= btn.x+btn.w and my >= btn.y and my <= btn.y+btn.h then
                 if btn.action then btn.action() else activeTool = btn.tool end
                 return
             end
         end
-        -- Slider handling
         for _, sld in ipairs(sliders) do
             if mx >= sld.x and mx <= sld.x+sld.w and my >= sld.y-5 and my <= sld.y+sld.h+5 then
                 sliderDrag = sld
@@ -105,7 +142,7 @@ function ui.mousepressed(mx, my, button)
         return
     end
 
-    -- Game world click
+    -- ==== Game world click ====
     if activeTool == cfg.TOOL_NONE then
         dragStart = {x = mx, y = my}
         dragging = true
@@ -181,6 +218,8 @@ function ui.mousereleased(mx, my, button)
 end
 
 function ui.mousemoved(mx, my, dx, dy)
+    ui.mouseX, ui.mouseY = mx, my   -- store for hover effects
+
     if dragging and activeTool == cfg.TOOL_NONE and dragStart then
         camera.x = camera.x - dx / camera.zoom
         camera.y = camera.y - dy / camera.zoom
@@ -228,70 +267,96 @@ end
 function ui.draw(efficiency, denizenCount)
     local panelX = cfg.GAME_WIDTH
 
+    -- ====== TOP MENU BAR (full width) ======
+    love.graphics.setColor(cfg.COL_UI_BG)
+    love.graphics.rectangle("fill", 0, 0, cfg.WINDOW_WIDTH, cfg.MENUBAR_HEIGHT)
+    bevelBox(0, 0, cfg.WINDOW_WIDTH, cfg.MENUBAR_HEIGHT, true)
+
+    -- File menu button (bevelButton draws the label)
+    local fileBtnX = 5
+    local fileBtnW = 50
+    local fileBtnH = cfg.MENUBAR_HEIGHT - 2
+    bevelButton(fileBtnX, 1, fileBtnW, fileBtnH, "File", menuOpen)
+
+    -- Dropdown (if open)
+    if menuOpen then
+        local dropdownX = fileBtnX
+        local dropdownY = cfg.MENUBAR_HEIGHT
+        local dropdownW = 120
+        local itemH = 20
+        local items = {"Save", "Load", "Exit"}
+        love.graphics.setColor(cfg.COL_UI_BG)
+        love.graphics.rectangle("fill", dropdownX, dropdownY, dropdownW, itemH * #items)
+        bevelBox(dropdownX, dropdownY, dropdownW, itemH * #items, false)
+        for i, item in ipairs(items) do
+            local iy = dropdownY + (i-1) * itemH
+            -- Highlight if mouse is over this item
+            local hover = false
+            if ui.mouseX >= dropdownX and ui.mouseX <= dropdownX + dropdownW
+               and ui.mouseY >= iy and ui.mouseY <= iy + itemH then
+                hover = true
+            end
+            love.graphics.setColor(hover and cfg.COL_UI_BUTTON_HI or cfg.COL_UI_BUTTON)
+            love.graphics.rectangle("fill", dropdownX+2, iy+1, dropdownW-4, itemH-2)
+            love.graphics.setColor(cfg.COL_UI_TEXT)
+            love.graphics.print(item, dropdownX+6, iy+3)
+        end
+    end
+
     -- ====== BOTTOM STATUS BAR (full width) ======
     local sbY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT
     love.graphics.setColor(cfg.COL_UI_BG)
     love.graphics.rectangle("fill", 0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT)
     bevelBox(0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT, true)
 
-    -- Familiarity / Unease / Dread bars
+    -- Resource bars (Familiarity, Unease, Dread) – thicker, with label inside
     local barX = 10
     local barW = (cfg.WINDOW_WIDTH - 30) / 3
-    local barH = 10
+    local barH = cfg.STATUSBAR_HEIGHT - 8
     local barY = sbY + 4
 
-    -- Familiarity
-    love.graphics.setColor(0.2, 0.6, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barW * game.familiarity, barH)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barW, barH)
-    love.graphics.print("Familiarity", barX, barY + barH + 2)
+    local function drawStatusBar(label, barX, barY, barW, barH, value, color)
+        love.graphics.setColor(0.1, 0.1, 0.1)
+        love.graphics.rectangle("fill", barX, barY, barW, barH)
+        love.graphics.setColor(color[1], color[2], color[3])
+        love.graphics.rectangle("fill", barX, barY, barW * value, barH)
+        bevelBox(barX, barY, barW, barH, true)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.print(label, barX + 4, barY + barH/2 - 7)
+    end
 
-    -- Unease
+    drawStatusBar("Familiarity", barX, barY, barW, barH, game.familiarity, {0.2, 0.6, 0.2})
     barX = barX + barW + 5
-    love.graphics.setColor(0.6, 0.6, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barW * game.unease, barH)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barW, barH)
-    love.graphics.print("Unease", barX, barY + barH + 2)
-
-    -- Dread
+    drawStatusBar("Unease", barX, barY, barW, barH, game.unease, {0.6, 0.6, 0.2})
     barX = barX + barW + 5
-    love.graphics.setColor(0.6, 0.2, 0.2)
-    love.graphics.rectangle("fill", barX, barY, barW * game.dread, barH)
-    love.graphics.setColor(1,1,1)
-    love.graphics.rectangle("line", barX, barY, barW, barH)
-    love.graphics.print("Dread", barX, barY + barH + 2)
+    drawStatusBar("Dread", barX, barY, barW, barH, game.dread, {0.6, 0.2, 0.2})
 
-    -- Denizen count & efficiency
+    -- Denizen count & efficiency (right side)
     local sx = cfg.WINDOW_WIDTH - 200
     love.graphics.setColor(cfg.COL_UI_TEXT)
-    love.graphics.print("Denizens: " .. denizenCount .. "  Eff: " .. efficiency .. "%", sx, sbY + 6)
+    love.graphics.print("Denizens: " .. denizenCount .. "  Eff: " .. efficiency .. "%", sx, sbY + barH/2 - 7)
 
-    -- Pause button
+    -- Pause button (moved to far right)
     local pauseW, pauseH = 60, 16
     local pauseX = cfg.WINDOW_WIDTH - pauseW - 10
-    local pauseY = sbY + 4
+    local pauseY = sbY + barH - pauseH - 2
     bevelButton(pauseX, pauseY, pauseW, pauseH, game.paused and "Resume" or "Pause", false)
 
     -- ====== RIGHT PANEL (tools & entity editor) ======
     love.graphics.setColor(cfg.COL_UI_BG)
-    love.graphics.rectangle("fill", panelX, 0, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT)
-    bevelBox(panelX, 0, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT, true)
+    love.graphics.rectangle("fill", panelX, cfg.MENUBAR_HEIGHT, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT)
+    bevelBox(panelX, cfg.MENUBAR_HEIGHT, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT, true)
 
     local x = panelX + 10
-    local y = 10
+    local y = cfg.MENUBAR_HEIGHT + 10
 
-    -- Tool heading
     love.graphics.setColor(cfg.COL_UI_TEXT)
     love.graphics.print("TOOLS", x, y)
     y = y + 20
 
-    -- Clear tables
     buttons = {}
     sliders = {}
 
-    -- Button width
     local bw = cfg.TOOL_PANEL_WIDTH - 20
 
     -- Tool buttons
@@ -311,50 +376,46 @@ function ui.draw(efficiency, denizenCount)
         y = y + 26
     end
 
-    -- Save / Load
-    y = y + 10
-    bevelButton(x, y, bw, 20, "Save", false)
-    table.insert(buttons, {x=x, y=y, w=bw, h=20, action = function() game.save() end})
-    y = y + 24
-    bevelButton(x, y, bw, 20, "Load", false)
-    table.insert(buttons, {x=x, y=y, w=bw, h=20, action = function() game.load() end})
+    -- Entity Editor (only when entity tool selected)
+    if activeTool == cfg.TOOL_ENTITY then
+        y = y + 10
+        love.graphics.setColor(cfg.COL_UI_TEXT)
+        love.graphics.print("ENTITY EDITOR", x, y)
+        y = y + 18
 
-    -- Entity Editor
-    y = y + 20
-    love.graphics.setColor(cfg.COL_UI_TEXT)
-    love.graphics.print("ENTITY EDITOR", x, y)
-    y = y + 20
+        local function addSlider(label, min, max, getter, setter)
+            local sw = bw
+            local sh = 14
+            local val = getter() or 0
+            love.graphics.setColor(cfg.SLIDER_TRACK_COLOR)
+            love.graphics.rectangle("fill", x, y + sh/2 - 2, sw, 4)
+            bevelBox(x, y + sh/2 - 2, sw, 4, true)
+            local frac = (val - min) / (max - min)
+            local hx = x + frac * sw - cfg.SLIDER_HANDLE_W/2
+            love.graphics.setColor(cfg.SLIDER_HANDLE_COLOR)
+            love.graphics.rectangle("fill", hx, y, cfg.SLIDER_HANDLE_W, sh)
+            bevelBox(hx, y, cfg.SLIDER_HANDLE_W, sh, false)
+            love.graphics.setColor(cfg.COL_UI_TEXT)
+            love.graphics.print(label .. ": " .. string.format("%.2f", val), x, y - 10)
+            table.insert(sliders, {x=x, y=y, w=sw, h=sh, min=min, max=max, setter=setter})
+            y = y + sh + 10
+        end
 
-    local function addSlider(label, min, max, getter, setter)
-        local sw = bw
-        local sh = 16
-        local val = getter() or 0
-        love.graphics.setColor(0.4, 0.4, 0.4)
-        love.graphics.rectangle("fill", x, y, sw, sh)
-        local frac = (val - min) / (max - min)
-        local handleX = x + frac * sw
-        love.graphics.setColor(1,1,1)
-        love.graphics.circle("fill", handleX, y + sh/2, 5)
-        love.graphics.print(label .. ": " .. string.format("%.2f", val), x, y - 12)
-        table.insert(sliders, {x=x, y=y, w=sw, h=sh, min=min, max=max, setter=setter})
-        y = y + sh + 14
+        addSlider("Speed", 20, 150, function() return game.entityTemplate.speed end, function(v) game.entityTemplate.speed = v end)
+        addSlider("Radius", 40, 250, function() return game.entityTemplate.radius end, function(v) game.entityTemplate.radius = v end)
+        addSlider("Despair/s", 0.01, 0.2, function() return game.entityTemplate.despairPerSec end, function(v) game.entityTemplate.despairPerSec = v end)
+        addSlider("Aggression", 0, 1, function() return game.entityTemplate.aggression end, function(v) game.entityTemplate.aggression = v end)
+        addSlider("Light Avoid", -1, 1, function() return game.entityTemplate.lightAvoidance end, function(v) game.entityTemplate.lightAvoidance = v end)
+        addSlider("Hearing", 50, 600, function() return game.entityTemplate.hearingRange end, function(v) game.entityTemplate.hearingRange = v end)
     end
-
-    addSlider("Speed", 20, 150, function() return game.entityTemplate.speed end, function(v) game.entityTemplate.speed = v end)
-    addSlider("Radius", 40, 250, function() return game.entityTemplate.radius end, function(v) game.entityTemplate.radius = v end)
-    addSlider("Despair/s", 0.01, 0.2, function() return game.entityTemplate.despairPerSec end, function(v) game.entityTemplate.despairPerSec = v end)
-    addSlider("Aggression", 0, 1, function() return game.entityTemplate.aggression end, function(v) game.entityTemplate.aggression = v end)
-    addSlider("Light Avoid", -1, 1, function() return game.entityTemplate.lightAvoidance end, function(v) game.entityTemplate.lightAvoidance = v end)
-    addSlider("Hearing", 50, 600, function() return game.entityTemplate.hearingRange end, function(v) game.entityTemplate.hearingRange = v end)
 
     -- ====== HOVERED OBJECT TOOLTIP (pop-up near mouse) ======
     local hovered = game.hoveredObject
     if hovered then
-        local mx, my = love.mouse.getPosition()
+        local mx, my = ui.mouseX, ui.mouseY
         local tipW, tipH = 130, 80
         local tipX = mx + 16
         local tipY = my + 16
-        -- clamp to game area (right panel excluded)
         if tipX + tipW > cfg.GAME_WIDTH then tipX = mx - tipW - 16 end
         if tipY + tipH > cfg.GAME_HEIGHT then tipY = my - tipH - 16 end
 

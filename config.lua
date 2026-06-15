@@ -76,9 +76,13 @@ config.COL_UI_BG   = {0.17, 0.17, 0.17}
 config.DENIZEN_COLOR_LOW  = {0.53, 0.67, 0.8}
 config.DENIZEN_COLOR_HIGH = {0.8, 0.2, 0.2}
 
--- Lighting
-config.LIGHT_DECAY_PER_TILE = 0.25
-config.LIGHT_MIN_AMBIENT    = 0.03
+-- Witness
+config.WITNESS_ANXIETY_SPIKE    = 0.4
+config.WITNESS_DESPAIR_SPIKE    = 0.3
+config.WITNESS_SIGHT_RANGE      = 200
+
+-- Fear
+config.FEAR_DURATION = 5
 
 -- Resource loop
 config.FAMILIARITY_SPAWN_MULT   = 2.0
@@ -100,15 +104,12 @@ config.EXIT_DETECTION_RANGE     = 250
 config.EXIT_ESCAPE_DISTANCE     = 20
 config.EXIT_FAMILIARITY_BOOST   = 0.1
 
--- Witness
-config.WITNESS_ANXIETY_SPIKE    = 0.4
-config.WITNESS_DESPAIR_SPIKE    = 0.3
-config.WITNESS_SIGHT_RANGE      = 200
+-- Lighting
+config.LIGHT_DECAY_PER_TILE = 0.25
+config.LIGHT_MIN_AMBIENT    = 0.03
 
--- Fear
-config.FEAR_DURATION = 5
 
--- Retro UI
+-- ==== Retro UI ====
 config.STATUSBAR_HEIGHT = 28
 config.TOOL_PANEL_WIDTH = 240   -- a bit narrower
 config.GAME_WIDTH = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
@@ -121,5 +122,14 @@ config.COL_UI_BG        = {0.17, 0.17, 0.17}
 config.COL_UI_TEXT      = {0.8, 0.8, 0.8}
 config.COL_UI_BUTTON    = {0.3, 0.3, 0.3}
 config.COL_UI_BUTTON_HI = {0.45, 0.45, 0.3}  -- selected
+
+-- Menu bar
+config.MENUBAR_HEIGHT = 36
+config.GAME_HEIGHT = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT - config.MENUBAR_HEIGHT
+
+-- Slider style
+config.SLIDER_TRACK_COLOR = {0.4, 0.4, 0.4}
+config.SLIDER_HANDLE_W = 12
+config.SLIDER_HANDLE_COLOR = {0.6, 0.6, 0.6}
 
 return config

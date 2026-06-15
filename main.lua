@@ -40,15 +40,15 @@ function love.keypressed(key)
 end
 
 function love.draw()
-    -- Game world (with CRT)
-    love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
+    -- Game world (with CRT) only from menu bar down to status bar
+    love.graphics.setScissor(0, cfg.MENUBAR_HEIGHT, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
     postfx.beginCapture()
     draw.world()
     postfx.endCapture()
-    love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
+    love.graphics.setScissor(0, cfg.MENUBAR_HEIGHT, cfg.WINDOW_WIDTH, cfg.GAME_HEIGHT)
     postfx.apply(love.timer.getDelta())
 
-    -- UI (crisp, no CRT)
+    -- UI (crisp, no CRT) – draws menu bar, right panel, status bar
     love.graphics.setScissor(0, 0, cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT)
     ui.draw(game.getEfficiency(), #game.denizens)
     love.graphics.setScissor()
