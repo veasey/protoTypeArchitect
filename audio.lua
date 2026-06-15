@@ -53,7 +53,7 @@ local sounds = {
         fallback = { freq = 880, duration = 0.1 },
     },
     -- Chase sound – key "roar" → playRoarSound() & stopRoarSound()
-    roar = {
+    entityChase = {
         file = "sounds/roar.mp3",
         fallback = { freq = 980, duration = 0.3, loop = true },
         mono = true,
@@ -66,12 +66,12 @@ local sounds = {
         stopFunc = true,  -- creates stopDenizenEnterLeaveSound()
     },
     foodPlace = {
-        file = "sounds/food_place.mp3",
+        file = "sounds/noclip.mp3",
         fallback = nil,
         stopFunc = false,
     },
     exitPlace = {
-        file = "sounds/exit_place.mp3",
+        file = "sounds/noclip.mp3",
         fallback = nil,
         stopFunc = false,
     },
@@ -215,29 +215,6 @@ function audio.resumeAll()
     end
 end
 
--- ============================================================
---  Safety net: ensure all expected sound functions exist
--- ============================================================
-local requiredFunctions = {
-    playBuildSound = "build",
-    stopBuildSound = "build",
-    playLampPlaceSound = "lampPlace",
-    playEntityPlaceSound = "entityPlace",
-    playEntityChaseSound = "roar",
-    stopEntityChaseSound = "roar",
-    playDenizenEnterLeaveSound = "denizenEnterLeave",
-    stopDenizenEnterLeaveSound = "denizenEnterLeave",
-    playFoodPlaceSound = "foodPlace",
-    playExitPlaceSound = "exitPlace",
-}
 
-for funcName, sourceKey in pairs(requiredFunctions) do
-    if not audio[funcName] then
-        -- Create a dummy function that does nothing (or logs)
-        audio[funcName] = function()
-            print("Warning: sound '" .. funcName .. "' not loaded, doing nothing.")
-        end
-    end
-end
 
 return audio
