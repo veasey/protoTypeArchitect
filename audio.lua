@@ -42,7 +42,7 @@ local sounds = {
     build = {
         file = "sounds/squelch.mp3",
         fallback = { freq = 220, duration = 0.4, loop = false },
-        stopFunc = true,   -- we want a stopBuildSound function
+        stopFunc = true,   -- creates stopBuildSound()
     },
     lampPlace = {
         file = "sounds/light_on.wav",
@@ -52,18 +52,19 @@ local sounds = {
         file = "sounds/slime_monster_1.wav",
         fallback = { freq = 880, duration = 0.1 },
     },
+    -- Chase sound – key "roar" → playRoarSound() & stopRoarSound()
     entityChase = {
         file = "sounds/roar.mp3",
         fallback = { freq = 980, duration = 0.3, loop = true },
         mono = true,
         stopFunc = true,
     },
-    noclip = {
+    -- Denizen enter/leave – key "denizenEnterLeave" → playDenizenEnterLeaveSound()
+    denizenEnterLeave = {
         file = "sounds/noclip.mp3",
-        fallback = nil,   -- no fallback, just skip
-        stopFunc = true,
+        fallback = nil,   -- no fallback
+        stopFunc = true,  -- creates stopDenizenEnterLeaveSound()
     },
-    -- Note: lampHum is handled separately because it needs cloning
 }
 
 -- This will hold the loaded sources, keyed by sound name

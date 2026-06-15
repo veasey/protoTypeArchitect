@@ -35,6 +35,76 @@ game.dread = 0
 game.dreadSpawnTimer = 0
 game.paused = false
 
+-- ============================================================
+--  Helpers (save/load, removal, hover)
+-- ============================================================
+local function comfortToTable(c)
+    return { x = c.x, y = c.y }
+end
+
+local function entityToTable(e)
+    return {
+        x = e.x, y = e.y,
+        speed = e.speed, radius = e.radius, despairPerSec = e.despairPerSec,
+        aggression = e.aggression, lightAvoidance = e.lightAvoidance,
+        hearingRange = e.hearingRange, state = e.state, active = e.active,
+    }
+end
+
+local function denizenToTable(d)
+    return {
+        x = d.x, y = d.y, vx = d.vx, vy = d.vy, state = d.state,
+        profile = {
+            anxiety = d.profile.anxiety,
+            despair = d.profile.despair,
+            speed   = d.profile.speed,
+        },
+        wanderTimer  = d.wanderTimer,
+        nextWander   = d.nextWander,
+        hidingTimer  = d.hidingTimer,
+        hideCooldown = d.hideCooldown,
+        fearTimer    = d.fearTimer,
+        lastChaserPos = d.lastChaserPos,
+    }
+end
+
+local function entityFromTable(ed)
+    local ent = Entity.create(ed.x, ed.y, {
+        speed = ed.speed, radius = ed.radius, despairPerSec = ed.despairPerSec,
+        aggression = ed.aggression, lightAvoidance = ed.lightAvoidance,
+        hearingRange = ed.hearingRange or cfg.ENTITY_DEFAULTS.hearingRange,
+    })
+    ent.active = ed.active
+    ent.state = ed.state or "lurking"
+    return ent
+end
+
+local function denizenFromTable(dd)
+    local den = Denizen.create(dd.x, dd.y)
+    den.vx = dd.vx; den.vy = dd.vy; den.state = dd.state
+    den.profile.anxiety = dd.profile.anxiety; den.profile.despair = dd.profile.despair
+    den.profile.speed = dd.profile.speed
+    den.wanderTimer = dd.wanderTimer; den.nextWander = dd.nextWander
+    den.hidingTimer = dd.hidingTimer or 0; den.hideCooldown = dd.hideCooldown or 0
+    den.fearTimer = dd.fearTimer or 0
+    den.lastChaserPos = dd.lastChaserPos or nil
+    return den
+end
+
+local function removeFromList(list, tx, ty, beforeRemove)
+    for i = #list, 1, -1 do
+        local item = list[i]
+        local ix, iy = map.worldToTile(item.x, item.y)
+        if ix == tx and iy == ty then
+            if beforeRemove then beforeRemove(item) end
+            table.remove(list, i)
+        end
+    end
+end
+
+-- ============================================================
+--  Initialisation
+-- ============================================================
 function game.init()
     map.generate()
     local cx = math.floor(cfg.MAP_COLS / 2)
@@ -44,6 +114,9 @@ function game.init()
     game.computeLighting()
 end
 
+-- ============================================================
+--  Spawning & placement
+-- ============================================================
 function game.spawnDenizen()
     local floors = map.getAllFloorTiles()
     local candidates = {}
@@ -77,52 +150,19 @@ function game.addExit(wx, wy)
     table.insert(game.exits, {x = wx, y = wy})
 end
 
+-- ============================================================
+--  Tile management
+-- ============================================================
 function game.clearTile(tileX, tileY)
-    local worldX, worldY = map.tileToWorld(tileX, tileY)
-
-    for i = #game.comforts, 1, -1 do
-        local c = game.comforts[i]
-        local tx, ty = map.worldToTile(c.x, c.y)
-        if tx == tileX and ty == tileY then
-            audio.removeLampLoop(c)
-            table.remove(game.comforts, i)
-        end
-    end
-
-    for i = #game.entities, 1, -1 do
-        local e = game.entities[i]
-        local tx, ty = map.worldToTile(e.x, e.y)
-        if tx == tileX and ty == tileY then
-            effects.addObjectFade("entity", e.x, e.y, 1, 1)
-            table.remove(game.entities, i)
-        end
-    end
-
-    for i = #game.denizens, 1, -1 do
-        local d = game.denizens[i]
-        local tx, ty = map.worldToTile(d.x, d.y)
-        if tx == tileX and ty == tileY then
-            effects.addObjectFade("denizen", d.x, d.y, 1, 1)
-            table.remove(game.denizens, i)
-            audio.playDenizenEnterLeaveSound()
-        end
-    end
-
-    for i = #game.foods, 1, -1 do
-        local f = game.foods[i]
-        local tx, ty = map.worldToTile(f.x, f.y)
-        if tx == tileX and ty == tileY then
-            table.remove(game.foods, i)
-        end
-    end
-
-    for i = #game.exits, 1, -1 do
-        local e = game.exits[i]
-        local tx, ty = map.worldToTile(e.x, e.y)
-        if tx == tileX and ty == tileY then
-            table.remove(game.exits, i)
-        end
-    end
+    local tx, ty = tileX, tileY
+    removeFromList(game.comforts, tx, ty, function(c) audio.removeLampLoop(c) end)
+    removeFromList(game.entities, tx, ty, function(e) effects.addObjectFade("entity", e.x, e.y, 1, 1) end)
+    removeFromList(game.denizens, tx, ty, function(d)
+        effects.addObjectFade("denizen", d.x, d.y, 1, 1)
+        audio.playDenizenEnterLeaveSound()
+    end)
+    removeFromList(game.foods,   tx, ty)
+    removeFromList(game.exits,   tx, ty)
 end
 
 function game.witnessTileChange(tileX, tileY)
@@ -136,6 +176,9 @@ function game.witnessTileChange(tileX, tileY)
     end
 end
 
+-- ============================================================
+--  Main update loop
+-- ============================================================
 function game.update(dt)
     if game.paused then return end
 
@@ -182,9 +225,8 @@ function game.update(dt)
         end
     end
 
-    local totalLight = 0
-    local totalAnxiety = 0
-    local totalDespair = 0
+    -- Compute global resources
+    local totalLight, totalAnxiety, totalDespair = 0, 0, 0
     local denCount = #game.denizens
     if denCount > 0 then
         for _, den in ipairs(game.denizens) do
@@ -198,11 +240,10 @@ function game.update(dt)
         game.unease = math.max(0, math.min(1, totalAnxiety / denCount))
         game.dread = math.max(0, math.min(1, totalDespair / denCount))
     else
-        game.familiarity = 0
-        game.unease = 0
-        game.dread = 0
+        game.familiarity, game.unease, game.dread = 0, 0, 0
     end
 
+    -- Dread entity spawning
     game.dreadSpawnTimer = game.dreadSpawnTimer + dt
     if game.dreadSpawnTimer >= cfg.DREAD_SPAWN_INTERVAL then
         game.dreadSpawnTimer = 0
@@ -226,6 +267,7 @@ function game.update(dt)
     game.computeLighting()
     effects.update(dt)
 
+    -- Stop build sound when no fades remain
     local hasTileFade = false
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" or e.type == "tile_fade_out" then
@@ -235,6 +277,9 @@ function game.update(dt)
     if not hasTileFade then audio.stopBuildSound() end
 end
 
+-- ============================================================
+--  Lighting
+-- ============================================================
 function game.computeLighting()
     local light = {}
     for r = 1, cfg.MAP_ROWS do
@@ -275,6 +320,9 @@ function game.computeLighting()
     game.lightmap = light
 end
 
+-- ============================================================
+--  Metrics & pause
+-- ============================================================
 function game.getEfficiency()
     if #game.denizens == 0 then return 0 end
     local count = 0
@@ -290,7 +338,9 @@ function game.togglePauseState()
     if game.paused then audio.pauseAll() else audio.resumeAll() end
 end
 
--- SAVE / LOAD
+-- ============================================================
+--  Save / Load
+-- ============================================================
 function game.save()
     local saveData = {
         map = {},
@@ -313,25 +363,13 @@ function game.save()
         end
     end
     for _, c in ipairs(game.comforts) do
-        table.insert(saveData.comforts, {x = c.x, y = c.y})
+        table.insert(saveData.comforts, comfortToTable(c))
     end
     for _, e in ipairs(game.entities) do
-        table.insert(saveData.entities, {
-            x = e.x, y = e.y,
-            speed = e.speed, radius = e.radius, despairPerSec = e.despairPerSec,
-            aggression = e.aggression, lightAvoidance = e.lightAvoidance,
-            hearingRange = e.hearingRange, state = e.state, active = e.active,
-        })
+        table.insert(saveData.entities, entityToTable(e))
     end
     for _, d in ipairs(game.denizens) do
-        table.insert(saveData.denizens, {
-            x = d.x, y = d.y, vx = d.vx, vy = d.vy, state = d.state,
-            profile = { anxiety = d.profile.anxiety, despair = d.profile.despair, speed = d.profile.speed },
-            wanderTimer = d.wanderTimer, nextWander = d.nextWander,
-            hidingTimer = d.hidingTimer, hideCooldown = d.hideCooldown,
-            fearTimer = d.fearTimer,
-            lastChaserPos = d.lastChaserPos,
-        })
+        table.insert(saveData.denizens, denizenToTable(d))
     end
     for _, f in ipairs(game.foods) do
         table.insert(saveData.foods, {x = f.x, y = f.y})
@@ -339,7 +377,7 @@ function game.save()
     for _, e in ipairs(game.exits) do
         table.insert(saveData.exits, {x = e.x, y = e.y})
     end
-    local serialized = "return " .. table.show(saveData, "saveData")
+    local serialized = "return " .. util.tableShow(saveData, "saveData")
     local ok, err = love.filesystem.write("backrooms_save.lua", serialized)
     if ok then print("Game saved.") else print("Save error: " .. tostring(err)) end
 end
@@ -372,25 +410,10 @@ function game.load()
 
     for _, cd in ipairs(saveData.comforts) do game.addComfort(cd.x, cd.y) end
     for _, ed in ipairs(saveData.entities) do
-        local ent = Entity.create(ed.x, ed.y, {
-            speed = ed.speed, radius = ed.radius, despairPerSec = ed.despairPerSec,
-            aggression = ed.aggression, lightAvoidance = ed.lightAvoidance,
-            hearingRange = ed.hearingRange or cfg.ENTITY_DEFAULTS.hearingRange,
-        })
-        ent.active = ed.active
-        ent.state = ed.state or "lurking"
-        table.insert(game.entities, ent)
+        table.insert(game.entities, entityFromTable(ed))
     end
     for _, dd in ipairs(saveData.denizens) do
-        local den = Denizen.create(dd.x, dd.y)
-        den.vx = dd.vx; den.vy = dd.vy; den.state = dd.state
-        den.profile.anxiety = dd.profile.anxiety; den.profile.despair = dd.profile.despair
-        den.profile.speed = dd.profile.speed
-        den.wanderTimer = dd.wanderTimer; den.nextWander = dd.nextWander
-        den.hidingTimer = dd.hidingTimer or 0; den.hideCooldown = dd.hideCooldown or 0
-        den.fearTimer = dd.fearTimer or 0
-        den.lastChaserPos = dd.lastChaserPos or nil
-        table.insert(game.denizens, den)
+        table.insert(game.denizens, denizenFromTable(dd))
     end
     for _, fd in ipairs(saveData.foods or {}) do game.addFood(fd.x, fd.y) end
     for _, ed in ipairs(saveData.exits or {}) do game.addExit(ed.x, ed.y) end
@@ -399,73 +422,29 @@ function game.load()
     print("Game loaded.")
 end
 
-function table.show(t, name, indent)
-    indent = indent or ""
-    local str = "{\n"
-    local isArray = true
-    for k, v in pairs(t) do
-        if type(k) ~= "number" then isArray = false break end
-    end
-    for k, v in pairs(t) do
-        local keyStr = isArray and "" or "[" .. (type(k) == "string" and string.format("%q", k) or tostring(k)) .. "] = "
-        if type(v) == "table" then
-            str = str .. indent .. "  " .. keyStr .. table.show(v, name, indent .. "  ") .. ",\n"
-        elseif type(v) == "string" then
-            str = str .. indent .. "  " .. keyStr .. string.format("%q", v) .. ",\n"
-        elseif type(v) == "number" or type(v) == "boolean" then
-            str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
-        end
-    end
-    str = str .. indent .. "}"
-    return str
-end
-
--- Returns the entity, denizen, food, or exit closest to the mouse cursor, if within 24px.
--- Call this once per frame, passing camera module.
+-- ============================================================
+--  Mouse hover
+-- ============================================================
 function game.getHoveredObject(mx, my, cam)
     local wx, wy = cam.screenToWorld(mx, my)
     local bestDist = 24
     local bestObj = nil
 
-    -- Check entities
-    for _, ent in ipairs(game.entities) do
-        local dx, dy = ent.x - wx, ent.y - wy
-        local dist = math.sqrt(dx*dx + dy*dy)
-        if dist < bestDist then
-            bestDist = dist
-            bestObj = { type = "entity", data = ent }
+    local function checkList(list, objType)
+        for _, obj in ipairs(list) do
+            local dx, dy = obj.x - wx, obj.y - wy
+            local dist = math.sqrt(dx*dx + dy*dy)
+            if dist < bestDist then
+                bestDist = dist
+                bestObj = { type = objType, data = obj }
+            end
         end
     end
 
-    -- Check denizens
-    for _, den in ipairs(game.denizens) do
-        local dx, dy = den.x - wx, den.y - wy
-        local dist = math.sqrt(dx*dx + dy*dy)
-        if dist < bestDist then
-            bestDist = dist
-            bestObj = { type = "denizen", data = den }
-        end
-    end
-
-    -- Check food
-    for _, food in ipairs(game.foods) do
-        local dx, dy = food.x - wx, food.y - wy
-        local dist = math.sqrt(dx*dx + dy*dy)
-        if dist < bestDist then
-            bestDist = dist
-            bestObj = { type = "food", data = food }
-        end
-    end
-
-    -- Check exits
-    for _, exitObj in ipairs(game.exits) do
-        local dx, dy = exitObj.x - wx, exitObj.y - wy
-        local dist = math.sqrt(dx*dx + dy*dy)
-        if dist < bestDist then
-            bestDist = dist
-            bestObj = { type = "exit", data = exitObj }
-        end
-    end
+    checkList(game.entities, "entity")
+    checkList(game.denizens, "denizen")
+    checkList(game.foods,    "food")
+    checkList(game.exits,    "exit")
 
     return bestObj
 end

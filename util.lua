@@ -146,4 +146,25 @@ function util.getPathDirection(map, x1, y1, x2, y2, avoidTarget)
     return nil
 end
 
+function util.tableShow(t, name, indent)
+    indent = indent or ""
+    local str = "{\n"
+    local isArray = true
+    for k, v in pairs(t) do
+        if type(k) ~= "number" then isArray = false break end
+    end
+    for k, v in pairs(t) do
+        local keyStr = isArray and "" or "[" .. (type(k) == "string" and string.format("%q", k) or tostring(k)) .. "] = "
+        if type(v) == "table" then
+            str = str .. indent .. "  " .. keyStr .. util.tableShow(v, name, indent .. "  ") .. ",\n"
+        elseif type(v) == "string" then
+            str = str .. indent .. "  " .. keyStr .. string.format("%q", v) .. ",\n"
+        elseif type(v) == "number" or type(v) == "boolean" then
+            str = str .. indent .. "  " .. keyStr .. tostring(v) .. ",\n"
+        end
+    end
+    str = str .. indent .. "}"
+    return str
+end
+
 return util
