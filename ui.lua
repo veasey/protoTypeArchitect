@@ -22,8 +22,65 @@ local isDraggingBuild = false
 local hoverTileX, hoverTileY = nil, nil
 
 -- Menu state
-local menuOpen = false    -- true when File menu is open
-ui.mouseX, ui.mouseY = 0, 0   -- updated in mousemoved
+local menuOpen = false
+ui.mouseX, ui.mouseY = 0, 0
+
+-- ========== RESOURCE CLAMPING (must be defined before use) ==========
+local function clampBuildRect()
+    if not isDraggingBuild or activeTool ~= cfg.TOOL_BUILD then return end
+    local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
+    local curTX, curTY = dragBuildCurrent[1], dragBuildCurrent[2]
+
+    local function countBuildable(x1, y1, x2, y2)
+        local count = 0
+        for x = x1, x2 do
+            for y = y1, y2 do
+                if map.isBuildable(x, y) then count = count + 1 end
+            end
+        end
+        return count
+    end
+
+    local x1 = math.min(startTX, curTX)
+    local y1 = math.min(startTY, curTY)
+    local x2 = math.max(startTX, curTX)
+    local y2 = math.max(startTY, curTY)
+
+    local maxTiles = math.floor(game.familiarityResource / cfg.BUILD_COST_PER_TILE)
+    if maxTiles <= 0 then
+        dragBuildCurrent = {startTX, startTY}
+        return
+    end
+
+    local tiles = countBuildable(x1, y1, x2, y2)
+    if tiles <= maxTiles then return end
+
+    local dirX = curTX - startTX
+    local dirY = curTY - startTY
+    local dist = math.sqrt(dirX*dirX + dirY*dirY)
+    if dist == 0 then return end
+    local stepX = dirX / dist
+    local stepY = dirY / dist
+
+    local newCurTX = curTX
+    local newCurTY = curTY
+    for i = 1, math.ceil(dist) do
+        newCurTX = newCurTX - stepX
+        newCurTY = newCurTY - stepY
+        local nx = math.floor(newCurTX + 0.5)
+        local ny = math.floor(newCurTY + 0.5)
+        local newX1 = math.min(startTX, nx)
+        local newY1 = math.min(startTY, ny)
+        local newX2 = math.max(startTX, nx)
+        local newY2 = math.max(startTY, ny)
+        local newCount = countBuildable(newX1, newY1, newX2, newY2)
+        if newCount <= maxTiles then
+            dragBuildCurrent = {nx, ny}
+            return
+        end
+    end
+    dragBuildCurrent = {startTX, startTY}
+end
 
 -- ========== DRAWING HELPERS ==========
 local function bevelBox(x, y, w, h, sunken)
@@ -78,7 +135,7 @@ end
 function ui.mousepressed(mx, my, button)
     if button ~= 1 then return end
 
-    -- ==== Dropdown menu items (if open) – first priority ====
+    -- ==== Dropdown menu items (if open) ====
     if menuOpen then
         local fileBtnX = 5
         local dropdownX = fileBtnX
@@ -100,7 +157,6 @@ function ui.mousepressed(mx, my, button)
                 return
             end
         end
-        -- Clicked outside the dropdown → close it
         menuOpen = false
         return
     end
@@ -163,6 +219,23 @@ function ui.mousereleased(mx, my, button)
         local rect = ui.getDragRect()
         if rect then
             local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
+
+            -- Resource check for building
+            if activeTool == cfg.TOOL_BUILD then
+                local tilesToBuild = 0
+                for x = rect.x1, rect.x2 do
+                    for y = rect.y1, rect.y2 do
+                        if map.isBuildable(x, y) then tilesToBuild = tilesToBuild + 1 end
+                    end
+                end
+                if game.familiarityResource < tilesToBuild * cfg.BUILD_COST_PER_TILE then
+                    -- Not enough resource, abort
+                    isDraggingBuild = false; dragBuildStart = nil; dragBuildCurrent = nil
+                    dragging = false; sliderDrag = nil
+                    return
+                end
+            end
+
             local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
             local endTX, endTY = dragBuildCurrent[1], dragBuildCurrent[2]
             local dirX = endTX - startTX
@@ -170,22 +243,29 @@ function ui.mousereleased(mx, my, button)
             local maxDist = math.sqrt(dirX*dirX + dirY*dirY)
             if maxDist == 0 then maxDist = 1 end
             local maxDelay = 0.4
+
             for x = rect.x1, rect.x2 do
                 for y = rect.y1, rect.y2 do
-                    if fillType == cfg.FLOOR and map.isBuildable(x, y) then
-                        map.setTile(x, y, fillType)
-                        local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
-                        local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
-                        effects.addTileFadeIn(x, y, delay)
-                        game.witnessTileChange(x, y)
-                    elseif fillType == cfg.VOID and map.grid[y] and map.grid[y][x] == cfg.FLOOR then
-                        local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
-                        map.setTile(x, y, fillType)
-                        game.clearTile(x, y)
-                        local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
-                        local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
-                        effects.addTileFadeOut(x, y, lightLevel, delay)
-                        game.witnessTileChange(x, y)
+                    if fillType == cfg.FLOOR then
+                        if map.isBuildable(x, y) then
+                            map.setTile(x, y, fillType)
+                            game.familiarityResource = math.max(0, game.familiarityResource - cfg.BUILD_COST_PER_TILE)
+                            local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                            local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
+                            effects.addTileFadeIn(x, y, delay)
+                            game.witnessTileChange(x, y)
+                        end
+                    else
+                        if map.grid[y] and map.grid[y][x] == cfg.FLOOR then
+                            local lightLevel = game.lightmap[y] and game.lightmap[y][x] or cfg.LIGHT_MIN_AMBIENT
+                            map.setTile(x, y, fillType)
+                            game.clearTile(x, y)
+                            game.familiarityResource = math.min(1, game.familiarityResource + cfg.REMOVE_REFUND)
+                            local proj = ((x - startTX) * dirX + (y - startTY) * dirY) / maxDist
+                            local delay = math.max(0, math.min((proj + 0.5) * maxDelay, maxDelay))
+                            effects.addTileFadeOut(x, y, lightLevel, delay)
+                            game.witnessTileChange(x, y)
+                        end
                     end
                 end
             end
@@ -204,8 +284,10 @@ function ui.mousereleased(mx, my, button)
                 game.addComfort(px, py)
                 audio.playLampPlaceSound()
             elseif activeTool == cfg.TOOL_ENTITY then
-                game.addEntity(px, py)
-                audio.playEntityPlaceSound()
+                if game.uneaseResource >= cfg.ENTITY_COST then
+                    game.addEntity(px, py)
+                    audio.playEntityPlaceSound()
+                end
             elseif activeTool == cfg.TOOL_FOOD then
                 game.addFood(px, py)
             elseif activeTool == cfg.TOOL_EXIT then
@@ -218,7 +300,7 @@ function ui.mousereleased(mx, my, button)
 end
 
 function ui.mousemoved(mx, my, dx, dy)
-    ui.mouseX, ui.mouseY = mx, my   -- store for hover effects
+    ui.mouseX, ui.mouseY = mx, my
 
     if dragging and activeTool == cfg.TOOL_NONE and dragStart then
         camera.x = camera.x - dx / camera.zoom
@@ -238,6 +320,7 @@ function ui.mousemoved(mx, my, dx, dy)
         local tx, ty = map.worldToTile(wx, wy)
         if tx and ty and tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
             dragBuildCurrent = {tx, ty}
+            clampBuildRect()   -- now safe because defined above
         end
     end
     if not isDraggingBuild and activeTool ~= cfg.TOOL_NONE then
@@ -272,13 +355,11 @@ function ui.draw(efficiency, denizenCount)
     love.graphics.rectangle("fill", 0, 0, cfg.WINDOW_WIDTH, cfg.MENUBAR_HEIGHT)
     bevelBox(0, 0, cfg.WINDOW_WIDTH, cfg.MENUBAR_HEIGHT, true)
 
-    -- File menu button (bevelButton draws the label)
     local fileBtnX = 5
     local fileBtnW = 50
     local fileBtnH = cfg.MENUBAR_HEIGHT - 2
     bevelButton(fileBtnX, 1, fileBtnW, fileBtnH, "File", menuOpen)
 
-    -- Dropdown (if open)
     if menuOpen then
         local dropdownX = fileBtnX
         local dropdownY = cfg.MENUBAR_HEIGHT
@@ -290,7 +371,6 @@ function ui.draw(efficiency, denizenCount)
         bevelBox(dropdownX, dropdownY, dropdownW, itemH * #items, false)
         for i, item in ipairs(items) do
             local iy = dropdownY + (i-1) * itemH
-            -- Highlight if mouse is over this item
             local hover = false
             if ui.mouseX >= dropdownX and ui.mouseX <= dropdownX + dropdownW
                and ui.mouseY >= iy and ui.mouseY <= iy + itemH then
@@ -309,7 +389,6 @@ function ui.draw(efficiency, denizenCount)
     love.graphics.rectangle("fill", 0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT)
     bevelBox(0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT, true)
 
-    -- Resource bars (Familiarity, Unease, Dread) – thicker, with label inside
     local barX = 10
     local barW = (cfg.WINDOW_WIDTH - 30) / 3
     local barH = cfg.STATUSBAR_HEIGHT - 8
@@ -322,7 +401,7 @@ function ui.draw(efficiency, denizenCount)
         love.graphics.rectangle("fill", barX, barY, barW * value, barH)
         bevelBox(barX, barY, barW, barH, true)
         love.graphics.setColor(1, 1, 1)
-        love.graphics.print(label, barX + 4, barY + barH/2 - 7)
+        love.graphics.print(label .. ": " .. string.format("%.2f", value), barX + 4, barY + barH/2 - 7)
     end
 
     drawStatusBar("Familiarity", barX, barY, barW, barH, game.familiarity, {0.2, 0.6, 0.2})
@@ -331,12 +410,10 @@ function ui.draw(efficiency, denizenCount)
     barX = barX + barW + 5
     drawStatusBar("Dread", barX, barY, barW, barH, game.dread, {0.6, 0.2, 0.2})
 
-    -- Denizen count & efficiency (right side)
     local sx = cfg.WINDOW_WIDTH - 200
     love.graphics.setColor(cfg.COL_UI_TEXT)
     love.graphics.print("Denizens: " .. denizenCount .. "  Eff: " .. efficiency .. "%", sx, sbY + barH/2 - 7)
 
-    -- Pause button (moved to far right)
     local pauseW, pauseH = 60, 16
     local pauseX = cfg.WINDOW_WIDTH - pauseW - 10
     local pauseY = sbY + barH - pauseH - 2
@@ -359,7 +436,6 @@ function ui.draw(efficiency, denizenCount)
 
     local bw = cfg.TOOL_PANEL_WIDTH - 20
 
-    -- Tool buttons
     local toolDefs = {
         { "None", cfg.TOOL_NONE },
         { "Lamp", cfg.TOOL_LAMP },
@@ -376,7 +452,6 @@ function ui.draw(efficiency, denizenCount)
         y = y + 26
     end
 
-    -- Entity Editor (only when entity tool selected)
     if activeTool == cfg.TOOL_ENTITY then
         y = y + 10
         love.graphics.setColor(cfg.COL_UI_TEXT)
@@ -409,7 +484,7 @@ function ui.draw(efficiency, denizenCount)
         addSlider("Hearing", 50, 600, function() return game.entityTemplate.hearingRange end, function(v) game.entityTemplate.hearingRange = v end)
     end
 
-    -- ====== HOVERED OBJECT TOOLTIP (pop-up near mouse) ======
+    -- ====== HOVERED OBJECT TOOLTIP ======
     local hovered = game.hoveredObject
     if hovered then
         local mx, my = ui.mouseX, ui.mouseY

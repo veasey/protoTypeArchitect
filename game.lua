@@ -35,6 +35,9 @@ game.dread = 0
 game.dreadSpawnTimer = 0
 game.paused = false
 
+game.familiarityResource = 1.0   -- spendable Familiarity
+game.uneaseResource      = 1.0   -- spendable Unease
+
 -- ============================================================
 --  Helpers (save/load, removal, hover)
 -- ============================================================
@@ -139,6 +142,7 @@ function game.addComfort(wx, wy)
 end
 
 function game.addEntity(wx, wy)
+    game.uneaseResource = math.max(0, game.uneaseResource - cfg.ENTITY_COST)
     table.insert(game.entities, Entity.create(wx, wy, game.entityTemplate))
 end
 
@@ -267,14 +271,15 @@ function game.update(dt)
     game.computeLighting()
     effects.update(dt)
 
-    -- Stop build sound when no fades remain
     local hasTileFade = false
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" or e.type == "tile_fade_out" then
             hasTileFade = true; break
         end
     end
-    if not hasTileFade then audio.stopBuildSound() end
+    if not hasTileFade and audio.stopBuildSound then
+        audio.stopBuildSound()
+    end
 end
 
 -- ============================================================
@@ -355,6 +360,8 @@ function game.save()
         unease = game.unease,
         dread = game.dread,
         dreadSpawnTimer = game.dreadSpawnTimer,
+        familiarityResource = game.familiarityResource,
+        uneaseResource = game.uneaseResource,
     }
     for r = 1, cfg.MAP_ROWS do
         saveData.map[r] = {}
@@ -401,6 +408,8 @@ function game.load()
     game.unease = saveData.unease or 0
     game.dread = saveData.dread or 0
     game.dreadSpawnTimer = saveData.dreadSpawnTimer or 0
+    game.familiarityResource = saveData.familiarityResource or 1.0
+    game.uneaseResource = saveData.uneaseResource or 1.0
 
     game.comforts = {}
     game.entities = {}

@@ -40,6 +40,13 @@ config.TOOL_FOOD   = "food"
 config.TOOL_EXIT   = "exit"
 
 -- ============================================================
+--  RESOURCE COSTS
+-- ============================================================
+config.BUILD_COST_PER_TILE = 0.05   -- Familiarity spent per floor tile built
+config.ENTITY_COST         = 0.2    -- Unease spent per entity placed
+config.REMOVE_REFUND       = 0.03   -- Familiarity regained per tile removed
+
+-- ============================================================
 --  STARTING ROOM
 -- ============================================================
 config.START_ROOM_RADIUS = 2
