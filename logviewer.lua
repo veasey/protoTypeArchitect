@@ -11,7 +11,7 @@ logviewer.maximized = false
 logviewer.dragging = false
 logviewer.dragOffX = 0
 logviewer.dragOffY = 0
-logviewer.viewMode = "live"   -- "live" or "records"
+logviewer.viewMode = "live"
 
 local function clampToGameArea()
     local maxX = 1200 - 280 - logviewer.width
@@ -65,7 +65,7 @@ function logviewer.mousepressed(mx, my, button)
         logviewer.dragOffY = my - logviewer.y
         return
     end
-    -- content area clicks
+    -- content area clicks (records only)
     local logger = require("logger")
     local lineH = 16
     local y = logviewer.y + 30 - logviewer.scrollY
@@ -123,7 +123,6 @@ function logviewer.draw()
     love.graphics.setColor(0.5, 0.5, 0.5)
     love.graphics.rectangle("fill", x+w-40, y+5, 15, 12)
     love.graphics.print("[]", x+w-38, y+4)
-    -- View mode toggle
     love.graphics.setColor(0.4, 0.4, 0.6)
     love.graphics.rectangle("fill", x+w-80, y+5, 35, 12)
     love.graphics.setColor(1,1,1)
@@ -136,16 +135,14 @@ function logviewer.draw()
     local cy = y + 25 - logviewer.scrollY
 
     if logviewer.viewMode == "live" then
-        -- Display live entries from logger.liveEntries
-        local entries = logger.liveEntries
-        for i = #entries, 1, -1 do  -- newest first
+        local entries = logger.liveEntries or {}  -- nil‑safe
+        for i = #entries, 1, -1 do
             local entry = entries[i]
             local line = entry.time .. " " .. entry.name .. ": " .. entry.event
             love.graphics.print(line, x+5, cy)
             cy = cy + lineH
         end
     else
-        -- Display completed records
         for i, rec in ipairs(logger.records) do
             local line = rec.type .. ": " .. (rec.name or rec.state) .. " - " .. rec.cause
             local textColor = (logviewer.selectedIndex == i) and {1, 1, 0} or {1, 1, 1}
