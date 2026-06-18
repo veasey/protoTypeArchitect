@@ -14,6 +14,7 @@ game.comforts  = {}
 game.entities  = {}
 game.foods     = {}
 game.exits     = {}
+game.corpses   = {}
 game.escapedCount = 0
 
 game.entityTemplate = {
@@ -35,8 +36,8 @@ game.dread = 0
 game.dreadSpawnTimer = 0
 game.paused = false
 
-game.familiarityResource = 1.0   -- spendable Familiarity
-game.uneaseResource      = 1.0   -- spendable Unease
+game.familiarityResource = 1.0
+game.uneaseResource      = 1.0
 
 -- ============================================================
 --  Helpers (save/load, removal, hover)
@@ -57,6 +58,7 @@ end
 local function denizenToTable(d)
     return {
         x = d.x, y = d.y, vx = d.vx, vy = d.vy, state = d.state,
+        name = d.name, personality = d.personality,
         profile = {
             anxiety = d.profile.anxiety,
             despair = d.profile.despair,
@@ -68,6 +70,8 @@ local function denizenToTable(d)
         hideCooldown = d.hideCooldown,
         fearTimer    = d.fearTimer,
         lastChaserPos = d.lastChaserPos,
+        frozenTimer = d.frozenTimer,
+        psychoticTimer = d.psychoticTimer,
     }
 end
 
@@ -85,12 +89,18 @@ end
 local function denizenFromTable(dd)
     local den = Denizen.create(dd.x, dd.y)
     den.vx = dd.vx; den.vy = dd.vy; den.state = dd.state
+    den.name = dd.name or "Unknown"
+    den.personality = dd.personality or "brave"
+    -- re-apply personality data
+    den.persData = cfg.PERSONALITIES[den.personality] or {}
     den.profile.anxiety = dd.profile.anxiety; den.profile.despair = dd.profile.despair
     den.profile.speed = dd.profile.speed
     den.wanderTimer = dd.wanderTimer; den.nextWander = dd.nextWander
     den.hidingTimer = dd.hidingTimer or 0; den.hideCooldown = dd.hideCooldown or 0
     den.fearTimer = dd.fearTimer or 0
     den.lastChaserPos = dd.lastChaserPos or nil
+    den.frozenTimer = dd.frozenTimer or 0
+    den.psychoticTimer = dd.psychoticTimer or 0
     return den
 end
 
@@ -167,6 +177,7 @@ function game.clearTile(tileX, tileY)
     end)
     removeFromList(game.foods,   tx, ty)
     removeFromList(game.exits,   tx, ty)
+    removeFromList(game.corpses, tx, ty)
 end
 
 function game.witnessTileChange(tileX, tileY)
@@ -197,7 +208,7 @@ function game.update(dt)
     end
 
     for _, den in ipairs(game.denizens) do
-        den:update(dt, map, game.entities, game.lightmap, game.unease, game.foods, game.exits)
+        den:update(dt, map, game.entities, game.lightmap, game.unease, game.foods, game.exits, game.denizens, game.familiarity)
         if den.escaped then
             game.escapedCount = game.escapedCount + 1
             game.familiarity = math.min(1, game.familiarity + cfg.EXIT_FAMILIARITY_BOOST)
@@ -206,6 +217,19 @@ function game.update(dt)
         end
     end
 
+    -- Handle denizen outcomes (corpses, entities from psychosis)
+    for i = #game.denizens, 1, -1 do
+        local den = game.denizens[i]
+        if den.becomeCorpse then
+            table.insert(game.corpses, {x = den.x, y = den.y})
+            table.remove(game.denizens, i)
+        elseif den.becomeEntity then
+            game.addEntity(den.x, den.y)
+            table.remove(game.denizens, i)
+        end
+    end
+
+    -- Remove escapees / toRemove
     for i = #game.denizens, 1, -1 do
         if game.denizens[i].toRemove then
             table.remove(game.denizens, i)
@@ -221,7 +245,7 @@ function game.update(dt)
         game.aiTimer = game.aiTimer - cfg.AI_INTERVAL
         for i = #game.denizens, 1, -1 do
             local den = game.denizens[i]
-            if den:updateDespair(cfg.AI_INTERVAL, game.comforts, game.entities, game.foods) then
+            if den:updateDespair(cfg.AI_INTERVAL, game.comforts, game.entities, game.foods, game.corpses) then
                 effects.addObjectFade("denizen", den.x, den.y, 1, 1)
                 table.remove(game.denizens, i)
                 audio.playDenizenEnterLeaveSound()
@@ -229,22 +253,34 @@ function game.update(dt)
         end
     end
 
-    -- Compute global resources
-    local totalLight, totalAnxiety, totalDespair = 0, 0, 0
+    -- Compute global resources (with social + light for familiarity)
+    local totalFamiliarityScore = 0
+    local totalAnxiety = 0
+    local totalDespair = 0
     local denCount = #game.denizens
     if denCount > 0 then
         for _, den in ipairs(game.denizens) do
             local tileX, tileY = map.worldToTile(den.x, den.y)
-            local light = game.lightmap[tileY] and game.lightmap[tileY][tileX] or 0
-            totalLight = totalLight + math.max(light, cfg.LIGHT_MIN_AMBIENT)
+            local light = math.max(game.lightmap[tileY] and game.lightmap[tileY][tileX] or 0, cfg.LIGHT_MIN_AMBIENT)
+            local social = (den.nearbyDenizenCount > 0) and 1 or 0
+            local score = 0.6 * light + 0.4 * social
+            totalFamiliarityScore = totalFamiliarityScore + score
             totalAnxiety = totalAnxiety + den.profile.anxiety
             totalDespair = totalDespair + den.profile.despair
         end
-        game.familiarity = math.max(0, math.min(1, totalLight / denCount))
-        game.unease = math.max(0, math.min(1, totalAnxiety / denCount))
-        game.dread = math.max(0, math.min(1, totalDespair / denCount))
+        local targetFamiliarity = math.max(0, math.min(1, totalFamiliarityScore / denCount))
+        local targetUnease = math.max(0, math.min(1, totalAnxiety / denCount))
+        local targetDread = math.max(0, math.min(1, totalDespair / denCount))
+
+        -- Smooth resource changes (max 0.05 per second)
+        local maxChange = 0.05 * dt
+        game.familiarity = game.familiarity + util.clamp(targetFamiliarity - game.familiarity, -maxChange, maxChange)
+        game.unease = game.unease + util.clamp(targetUnease - game.unease, -maxChange, maxChange)
+        game.dread = game.dread + util.clamp(targetDread - game.dread, -maxChange, maxChange)
     else
-        game.familiarity, game.unease, game.dread = 0, 0, 0
+        game.familiarity = 0
+        game.unease = 0
+        game.dread = 0
     end
 
     -- Dread entity spawning
@@ -354,6 +390,7 @@ function game.save()
         denizens = {},
         foods = {},
         exits = {},
+        corpses = {},
         entityTemplate = game.entityTemplate,
         escapedCount = game.escapedCount,
         familiarity = game.familiarity,
@@ -383,6 +420,9 @@ function game.save()
     end
     for _, e in ipairs(game.exits) do
         table.insert(saveData.exits, {x = e.x, y = e.y})
+    end
+    for _, c in ipairs(game.corpses) do
+        table.insert(saveData.corpses, {x = c.x, y = c.y})
     end
     local serialized = "return " .. util.tableShow(saveData, "saveData")
     local ok, err = love.filesystem.write("backrooms_save.lua", serialized)
@@ -416,6 +456,7 @@ function game.load()
     game.denizens = {}
     game.foods = {}
     game.exits = {}
+    game.corpses = {}
 
     for _, cd in ipairs(saveData.comforts) do game.addComfort(cd.x, cd.y) end
     for _, ed in ipairs(saveData.entities) do
@@ -426,6 +467,9 @@ function game.load()
     end
     for _, fd in ipairs(saveData.foods or {}) do game.addFood(fd.x, fd.y) end
     for _, ed in ipairs(saveData.exits or {}) do game.addExit(ed.x, ed.y) end
+    for _, cd in ipairs(saveData.corpses or {}) do
+        table.insert(game.corpses, {x = cd.x, y = cd.y})
+    end
 
     game.computeLighting()
     print("Game loaded.")
@@ -454,6 +498,7 @@ function game.getHoveredObject(mx, my, cam)
     checkList(game.denizens, "denizen")
     checkList(game.foods,    "food")
     checkList(game.exits,    "exit")
+    checkList(game.corpses,  "corpse")
 
     return bestObj
 end

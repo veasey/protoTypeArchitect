@@ -1,6 +1,6 @@
 local cfg     = require("config")
 local game    = require("game")
-local audio    = require("audio")
+local audio     = require("audio")
 local draw    = require("draw")
 local ui      = require("ui")
 local camera  = require("camera")

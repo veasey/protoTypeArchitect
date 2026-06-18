@@ -179,6 +179,15 @@ function draw.world()
         love.graphics.setLineWidth(1)
     end
 
+     -- Corpses
+    for _, corpse in ipairs(game.corpses) do
+        love.graphics.setColor(0.5, 0.2, 0.2, 0.8)
+        love.graphics.circle("fill", corpse.x, corpse.y, 6)
+        love.graphics.setColor(0.8, 0.1, 0.1, 0.6)
+        love.graphics.line(corpse.x-4, corpse.y-4, corpse.x+4, corpse.y+4)
+        love.graphics.line(corpse.x+4, corpse.y-4, corpse.x-4, corpse.y+4)
+    end
+
     camera.popTransform()
 end
 

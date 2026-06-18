@@ -507,7 +507,7 @@ function ui.draw(efficiency, denizenCount)
             love.graphics.print(string.format("Desp/s:%.2f Agg:%.2f", e.despairPerSec, e.aggression), tipX+4, tipY+46)
         elseif hovered.type == "denizen" then
             local d = hovered.data
-            love.graphics.print("Denizen", tipX+4, tipY+4)
+            love.graphics.print(d.name, tipX+4, tipY+4)   -- <-- name here
             love.graphics.print("State: " .. d.state, tipX+4, tipY+18)
             love.graphics.print(string.format("Desp:%.2f Anx:%.2f", d.profile.despair, d.profile.anxiety), tipX+4, tipY+32)
             love.graphics.print(string.format("Speed:%.0f", d.profile.speed), tipX+4, tipY+46)

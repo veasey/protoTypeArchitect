@@ -71,6 +71,38 @@ config.AVOID_LOOK_AHEAD        = 1.0
 config.AVOID_STRENGTH          = 2.0
 config.FEAR_DURATION           = 5
 
+-- Corpse
+config.CORPSE_DESPAIR_RADIUS = 80
+config.CORPSE_DESPAIR_PER_SEC = 0.1
+
+-- Social
+config.SOCIAL_RADIUS = 50          -- denizens within this distance count as "grouped"
+
+-- Psychosis
+config.PSYCHOTIC_DURATION = 15     -- seconds before a psychotic denizen becomes an entity
+config.PSYCHOTIC_SPEED_MULT = 2.0  -- how fast they move
+
+-- Freeze to corpse
+config.FREEZE_DURATION = 10        -- seconds before a frozen denizen dies
+
+-- Denizen names (just a small list)
+config.DENIZEN_NAMES = {
+    "Alan", "Brenda", "Charlie", "Dana", "Eli",
+    "Frankie", "Gary", "Heather", "Ian", "Jasper",
+    "Kael", "Lumen", "Mara", "Nick", "Oscar",
+    "Piper", "Quinn", "Rowan", "Sage", "Thomas",
+    "Andy", "Tim", "Kev", "Jags"
+}
+
+-- Personalities (affect behavior slightly)
+config.PERSONALITIES = {
+    brave   = { anxietyMult = 0.7, fleeSpeed = 1.2 },
+    nervous = { anxietyMult = 1.3, hideCooldown = 0.5 },
+    curious = { exploreRange = 1.5 },
+    stoic   = { despairResist = 0.5 },   -- despair rises slower
+    fragile = { despairMult = 1.5 }
+}
+
 -- ============================================================
 --  DESPAIR & COMFORT
 -- ============================================================
