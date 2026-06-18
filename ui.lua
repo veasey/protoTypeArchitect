@@ -323,7 +323,8 @@ function ui.mousereleased(mx, my, button)
                 end
             elseif activeTool == cfg.TOOL_FOOD then
                 game.addFood(px, py)
-            -- Exit placement removed
+            elseif activeTool == cfg.TOOL_EXIT then
+                game.addExit(px, py)
             end
         end
     end
@@ -503,6 +504,7 @@ function ui.draw(efficiency, denizenCount)
         { "Build", cfg.TOOL_BUILD },
         { "Remove", cfg.TOOL_REMOVE },
         { "Food", cfg.TOOL_FOOD },
+        { "Exit Door", cfg.TOOL_EXIT },
     }
     for _, def in ipairs(toolDefs) do
         local bh = 20

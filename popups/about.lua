@@ -29,6 +29,7 @@ function about.draw()
     love.graphics.setColor(1, 1, 1)
     local lines = {
         "Backrooms Architect",
+        "Version: 0.1.0 (Early Prototype)",
         " ",
         "Hotkeys:",
         "P / PAUSE   - Pause / Resume",
@@ -37,7 +38,13 @@ function about.draw()
         "F5          - Save game",
         "F6          - Load game",
         " ",
-        "A minimalist backrooms management sim.",
+        "A backrooms management sim developed by Clint Veasey.", 
+        "",
+        "Inspired by the backrooms creepypasta.",
+        "",
+        "If you have any questions, comments, or suggestions",
+        "please reach out to me within a shared dreamstate of",
+        "liminal horror.",
     }
     local lineH = 16
     local cy = y + 25
