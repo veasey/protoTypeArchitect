@@ -20,6 +20,7 @@ function love.update(dt)
     game.update(dt)
     local mx, my = love.mouse.getPosition()
     game.hoveredObject = game.getHoveredObject(mx, my, camera)
+    achievements.update(dt)
 end
 
 function love.draw()
@@ -36,6 +37,7 @@ function love.draw()
     ui.draw(game.getEfficiency(), #game.denizens)
     logviewer.draw()
     achievements.draw()
+    achievements.drawNotifications()
     love.graphics.setScissor()
 end
 

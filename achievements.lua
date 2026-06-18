@@ -17,20 +17,74 @@ local achievements = {
         maxAnxiety = "Reach maximum Unease",
         perfectEquilibrium = "Balance all resources for 60s",
     },
+    notifications = {},   -- { text, timer, alpha }
+    NOTIFICATION_DURATION = 5,  -- seconds
 }
 
+-- add a new achievement notification
+function achievements.addNotification(text)
+    table.insert(achievements.notifications, {
+        text = text,
+        timer = achievements.NOTIFICATION_DURATION,
+        alpha = 1,
+    })
+end
+
 function achievements.check(gameState)
+    -- check each achievement, fire notification when first earned
     if not achievements.earned.maxFamiliarity and gameState.familiarity >= 0.99 then
         achievements.earned.maxFamiliarity = true
+        achievements.addNotification("Achievement: Blinding Comfort")
     end
     if not achievements.earned.maxDread and gameState.dread >= 0.99 then
         achievements.earned.maxDread = true
+        achievements.addNotification("Achievement: Abyssal Dread")
     end
     if not achievements.earned.maxAnxiety and gameState.unease >= 0.99 then
         achievements.earned.maxAnxiety = true
+        achievements.addNotification("Achievement: Panic's Peak")
     end
     if not achievements.earned.perfectEquilibrium and (gameState.perfectEquilibriumTimer or 0) >= 60 then
         achievements.earned.perfectEquilibrium = true
+        achievements.addNotification("Achievement: The Golden Mean")
+    end
+end
+
+function achievements.update(dt)
+    -- update notification timers and fade out
+    for i = #achievements.notifications, 1, -1 do
+        local notif = achievements.notifications[i]
+        notif.timer = notif.timer - dt
+        if notif.timer <= 0 then
+            table.remove(achievements.notifications, i)
+        else
+            notif.alpha = math.min(1, notif.timer / 1.5)  -- fade over last 1.5s
+        end
+    end
+end
+
+function achievements.drawNotifications()
+    if #achievements.notifications == 0 then return end
+    -- draw at top center of window
+    local maxWidth = 0
+    for _, notif in ipairs(achievements.notifications) do
+        local w = love.graphics.getFont():getWidth(notif.text)
+        if w > maxWidth then maxWidth = w end
+    end
+    local boxW = maxWidth + 20
+    local boxH = 20 + #achievements.notifications * 18
+    local boxX = (1200 - 280) / 2 - boxW / 2   -- center of game area (excluding right panel)
+    local boxY = 50
+
+    -- translucent background
+    love.graphics.setColor(0, 0, 0, 0.7)
+    love.graphics.rectangle("fill", boxX, boxY, boxW, boxH)
+    love.graphics.setColor(1, 1, 0, 0.5)
+    love.graphics.rectangle("line", boxX, boxY, boxW, boxH)
+
+    for i, notif in ipairs(achievements.notifications) do
+        love.graphics.setColor(1, 1, 0, notif.alpha)
+        love.graphics.print(notif.text, boxX + 10, boxY + 5 + (i-1)*18)
     end
 end
 
