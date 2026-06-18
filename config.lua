@@ -170,10 +170,20 @@ config.PSYCHOTIC_SPEED_MULT = 2.0
 config.FREEZE_DURATION = 10
 
 config.DENIZEN_NAMES = {
-    "Alan", "Brenda", "Charlie", "Dana", "Eli",
-    "Frankie", "Glitch", "Hollow", "Ivy", "Jasper",
-    "Kael", "Lumen", "Mara", "Nyx", "Oscar",
-    "Piper", "Quinn", "Rowan", "Sage", "Thorn"
+    "Alice","Bob","Carol","Dave","Eve","Frank","Grace","Hank","Irene","Jack",
+    "Karen","Leo","Mona","Nate","Olivia","Paul","Quinn","Ruth","Sam","Tina",
+    "Uma","Vince","Wendy","Xander","Yara","Zane","Amber","Brian","Clara","Derek",
+    "Elena","Fred","Gina","Harry","Isla","Jake","Kira","Liam","Maya","Noah",
+    "Oscar","Penny","Quentin","Rosa","Steve","Tracy","Ulysses","Vera","Will","Xena",
+    "Yuri","Zara","Aiden","Beth","Cody","Diana","Eddie","Fiona","George","Holly",
+    "Ivan","Jade","Kurt","Lana","Miles","Nora","Owen","Paige","Reed","Sasha",
+    "Theo","Ursula","Vern","Whitney","Ximena","Yosef","Zelda","Aria","Ben","Celia",
+    "Dylan","Esme","Felix","Gwen","Hector","Iris","Jonah","Kylie","Lyle","Margo",
+    "Neil","Opal","Peter","Queenie","Rex","Sylvie","Todd","Unity","Vance","Willa",
+    "Xabi","Yasmin","Zeke","Adele","Bryce","Cora","Dante","Eliza","Flynn","Gemma",
+    "Hugo","Inez","Jules","Kendra","Lars","Mira","Nigel","Olive","Preston","Qiana",
+    "Rhys","Sadie","Trent","Ulani","Viktor","Wren","Xiomara","Yohan","Zara",
+    "Andrew", "Kev", "Jags", "Tim"
 }
 
 config.PERSONALITIES = {
