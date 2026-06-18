@@ -17,7 +17,6 @@ function draw.world()
     local top   = math.max(1, math.floor((camera.y - cfg.GAME_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
     local bottom = math.min(cfg.MAP_ROWS, math.ceil((camera.y + cfg.GAME_HEIGHT/2 * invZoom) / cfg.TILE_SIZE))
 
-    -- Draw tiles with lighting (skip fading‑in tiles)
     for r = top, bottom do
         for c = left, right do
             local tile = map.grid[r][c]
@@ -37,7 +36,6 @@ function draw.world()
         end
     end
 
-    -- Tile fade effects
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" then
             local lightLevel = game.lightmap[e.tileY] and game.lightmap[e.tileY][e.tileX] or 0
@@ -51,7 +49,6 @@ function draw.world()
         end
     end
 
-    -- Object fade effects
     for _, e in ipairs(effects.list) do
         if e.type == "object_fade" then
             love.graphics.setColor(1, 1, 1, e.alpha)
@@ -65,13 +62,11 @@ function draw.world()
         end
     end
 
-    -- Drag building preview
     local rect = ui.getDragRect()
     if rect then
         local tool = ui.getActiveTool()
         local r, g, b, a
         if tool == cfg.TOOL_BUILD then
-            -- check if we have enough resource to build any tile in the rect
             local maxTiles = math.floor(game.familiarityResource / cfg.BUILD_COST_PER_TILE)
             local canBuild = false
             for x = rect.x1, rect.x2 do
@@ -80,7 +75,7 @@ function draw.world()
                 end
             end
             if maxTiles <= 0 or not canBuild then
-                r, g, b, a = 0.8, 0.2, 0.2, 0.4   -- red for cannot afford
+                r, g, b, a = 0.8, 0.2, 0.2, 0.4
             else
                 r, g, b, a = 0.2, 0.8, 0.2, 0.4
             end
@@ -106,37 +101,32 @@ function draw.world()
         love.graphics.setLineWidth(1)
     end
 
-    -- Single tile hover
     local hover = ui.getHoverTile()
-    if hover then
-        if not ui.getDragRect() then
-            local tx = (hover.x-1)*cfg.TILE_SIZE
-            local ty = (hover.y-1)*cfg.TILE_SIZE
-            local valid = false
-            local tool = ui.getActiveTool()
-            if tool == cfg.TOOL_LAMP or tool == cfg.TOOL_ENTITY or tool == cfg.TOOL_FOOD or tool == cfg.TOOL_EXIT then
-                valid = map.isWalkable(hover.x, hover.y)
-            elseif tool == cfg.TOOL_BUILD then
-                valid = map.isBuildable(hover.x, hover.y) and game.familiarityResource >= cfg.BUILD_COST_PER_TILE
-            elseif tool == cfg.TOOL_REMOVE then
-                valid = (map.grid[hover.y] and map.grid[hover.y][hover.x] == cfg.FLOOR)
-            end
-            local r, g, b = 1, 1, 1
-            if not valid then r, g, b = 1, 0.3, 0.3 end
-            love.graphics.setColor(r, g, b, 0.5)
-            love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
-            love.graphics.setColor(r, g, b, 0.9)
-            love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
+    if hover and not ui.getDragRect() then
+        local tx = (hover.x-1)*cfg.TILE_SIZE
+        local ty = (hover.y-1)*cfg.TILE_SIZE
+        local valid = false
+        local tool = ui.getActiveTool()
+        if tool == cfg.TOOL_LAMP or tool == cfg.TOOL_ENTITY or tool == cfg.TOOL_FOOD or tool == cfg.TOOL_EXIT then
+            valid = map.isWalkable(hover.x, hover.y)
+        elseif tool == cfg.TOOL_BUILD then
+            valid = map.isBuildable(hover.x, hover.y) and game.familiarityResource >= cfg.BUILD_COST_PER_TILE
+        elseif tool == cfg.TOOL_REMOVE then
+            valid = (map.grid[hover.y] and map.grid[hover.y][hover.x] == cfg.FLOOR)
         end
+        local r, g, b = 1, 1, 1
+        if not valid then r, g, b = 1, 0.3, 0.3 end
+        love.graphics.setColor(r, g, b, 0.5)
+        love.graphics.rectangle("fill", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
+        love.graphics.setColor(r, g, b, 0.9)
+        love.graphics.rectangle("line", tx, ty, cfg.TILE_SIZE, cfg.TILE_SIZE)
     end
 
-    -- Comfort lamps
     for _, lamp in ipairs(game.comforts) do
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.lamp, lamp.x - 16, lamp.y - 16)
     end
 
-    -- Entities
     for _, ent in ipairs(game.entities) do
         love.graphics.setColor(cfg.COL_ENTITY_RADIUS)
         love.graphics.circle("line", ent.x, ent.y, ent.radius)
@@ -144,7 +134,6 @@ function draw.world()
         love.graphics.draw(sprites.entity, ent.x - 16, ent.y - 16)
     end
 
-    -- Denizens
     for _, den in ipairs(game.denizens) do
         local col = den:getColor()
         love.graphics.setColor(col)
@@ -158,17 +147,25 @@ function draw.world()
         end
     end
 
-    -- Food and Exits
     for _, food in ipairs(game.foods) do
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.food, food.x - 16, food.y - 16)
     end
+
     for _, exitObj in ipairs(game.exits) do
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(sprites.exit, exitObj.x - 16, exitObj.y - 16)
     end
 
-    -- Selection square around hovered object
+    -- Corpses
+    for _, corpse in ipairs(game.corpses) do
+        love.graphics.setColor(0.5, 0.2, 0.2, 0.8)
+        love.graphics.circle("fill", corpse.x, corpse.y, 6)
+        love.graphics.setColor(0.8, 0.1, 0.1, 0.6)
+        love.graphics.line(corpse.x-4, corpse.y-4, corpse.x+4, corpse.y+4)
+        love.graphics.line(corpse.x+4, corpse.y-4, corpse.x-4, corpse.y+4)
+    end
+
     local hovered = game.hoveredObject
     if hovered and hovered.data then
         local obj = hovered.data
@@ -177,15 +174,6 @@ function draw.world()
         love.graphics.setLineWidth(2)
         love.graphics.rectangle("line", obj.x - s, obj.y - s, s*2, s*2)
         love.graphics.setLineWidth(1)
-    end
-
-     -- Corpses
-    for _, corpse in ipairs(game.corpses) do
-        love.graphics.setColor(0.5, 0.2, 0.2, 0.8)
-        love.graphics.circle("fill", corpse.x, corpse.y, 6)
-        love.graphics.setColor(0.8, 0.1, 0.1, 0.6)
-        love.graphics.line(corpse.x-4, corpse.y-4, corpse.x+4, corpse.y+4)
-        love.graphics.line(corpse.x+4, corpse.y-4, corpse.x-4, corpse.y+4)
     end
 
     camera.popTransform()

@@ -1,29 +1,30 @@
 local cfg  = require("config")
 local util = require("util")
 local map  = require("map")
+local logger = require("logger")
 
 local Denizen = {}
 Denizen.__index = Denizen
 
+-- Helper: add an event and also write it to the live log file
+local function addEvent(denizen, event)
+    table.insert(denizen.events, event)
+    logger.logLive(denizen.name, denizen.personality, event)
+end
+
 function Denizen.create(x, y)
     local self = setmetatable({}, Denizen)
-    self.events = {}   -- list of strings
     self.x = x
     self.y = y
     self.vx = 0
     self.vy = 0
-    self.state = "wandering"   -- "wandering", "hiding", "fleeing", "escaping", "frozen", "psychotic"
+    self.state = "wandering"
     self.previousState = "wandering"
     self.name = cfg.DENIZEN_NAMES[love.math.random(#cfg.DENIZEN_NAMES)]
-    local persKey = nil
-    local persData = nil
-    -- pick a random personality
     local keys = {}
     for k,_ in pairs(cfg.PERSONALITIES) do table.insert(keys, k) end
-    persKey = keys[love.math.random(#keys)]
-    persData = cfg.PERSONALITIES[persKey]
-    self.personality = persKey
-    self.persData = persData
+    self.personality = keys[love.math.random(#keys)]
+    self.persData = cfg.PERSONALITIES[self.personality]
 
     self.profile = {
         anxiety = love.math.random() * 0.5 + 0.3,
@@ -38,17 +39,15 @@ function Denizen.create(x, y)
     self.fearTimer = 0
     self.escaped = false
     self.toRemove = false
-
-    -- Outcome timers
     self.frozenTimer = 0
     self.psychoticTimer = 0
-
-    -- Social grouping: computed externally
     self.nearbyDenizenCount = 0
+    self.events = {}   -- event log
+    addEvent(self, "Spawned in the Backrooms")
     return self
 end
 
-function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, allDenizens)
+function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, allDenizens, familiarity)
     self.hideCooldown = math.max(0, self.hideCooldown - dt)
     self.fearTimer = math.max(0, self.fearTimer - dt)
 
@@ -57,21 +56,19 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
     lightLevel = math.max(lightLevel, cfg.LIGHT_MIN_AMBIENT)
     local effectiveSight = cfg.DENIZEN_SIGHT_RANGE * lightLevel
 
-    -- Personality modifiers
     local anxietyMult = self.persData.anxietyMult or 1.0
     local despairResist = self.persData.despairResist or 1.0
 
-    -- Dynamic anxiety (darkness increases, light decreases)
+    -- Dynamic anxiety
     self.profile.anxiety = self.profile.anxiety + dt * anxietyMult * (
         (1 - lightLevel) * cfg.ANXIETY_DARK_GAIN - lightLevel * cfg.ANXIETY_LIGHT_RECOVERY
     )
     self.profile.anxiety = util.clamp(self.profile.anxiety, 0, 1)
 
-    -- Despair from darkness / isolation (light counteracts, comfort food later)
-    local baseDespairDelta = cfg.BASE_DESPAIR_RATE * (1 - lightLevel) * despairResist * dt
-    self.profile.despair = self.profile.despair + baseDespairDelta
+    -- Base despair from darkness
+    self.profile.despair = self.profile.despair + cfg.BASE_DESPAIR_RATE * (1 - lightLevel) * despairResist * dt
 
-    -- Social grouping: count nearby denizens (passed from game.update)
+    -- Social grouping
     self.nearbyDenizenCount = 0
     for _, other in ipairs(allDenizens) do
         if other ~= self then
@@ -91,31 +88,27 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         end
     end
 
-    -- Speed modulation by unease
     local effectiveSpeed = self.profile.speed * (1 + (unease or 0) * cfg.UNEASE_SPEED_BOOST)
 
-    -- Check for despair peak outcomes (priority over normal states)
+    -- Despair peak outcomes
     if self.state ~= "frozen" and self.state ~= "psychotic" and self.profile.despair >= 0.95 then
-        -- Determine outcome based on anxiety and familiarity (global)
-        local familiarity = game.familiarity  -- we'll assume global game is accessible; otherwise pass it
         if self.profile.anxiety < 0.4 and familiarity < 0.5 then
             self.state = "frozen"
             self.vx = 0; self.vy = 0
             self.frozenTimer = 0
+            addEvent(self, "Gave up hope, frozen in despair")
         elseif self.profile.anxiety >= 0.6 then
             self.state = "psychotic"
             self.psychoticTimer = 0
+            addEvent(self, "Anxiety snapped, became psychotic")
         elseif familiarity > 0.6 then
-            -- Noclip out
             self.toRemove = true
-            game.familiarity = math.min(1, game.familiarity + 0.05)   -- slight boost
-            audio.playDenizenEnterLeaveSound()
+            addEvent(self, "Noclipped out (high familiarity)")
         end
     end
 
-    -- Standard behavior states
     if self.state ~= "frozen" and self.state ~= "psychotic" then
-        -- Scan entities (line-of-sight)
+        -- Scan entities
         local closestChaser = nil
         local closestChaseDist = math.huge
         local anyEntitySeen = false
@@ -135,7 +128,6 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             end
         end
 
-        -- Fear memory
         if closestChaser then
             self.lastChaserPos = {x = closestChaser.x, y = closestChaser.y}
             self.fearTimer = cfg.FEAR_DURATION
@@ -157,14 +149,23 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         -- State transitions
         self.previousState = self.state
         if closestChaser then
+            if self.state ~= "fleeing" then
+                addEvent(self, "Spotted a chaser, fleeing!")
+            end
             self.state = "fleeing"
             self.hidingTimer = 0
         elseif closestExit then
+            if self.state ~= "escaping" then
+                addEvent(self, "Found an exit, heading for it")
+            end
             self.state = "escaping"
             if closestExitDist <= cfg.EXIT_ESCAPE_DISTANCE then
                 self.escaped = true
             end
         elseif anyEntitySeen and self.hideCooldown <= 0 then
+            if self.state ~= "hiding" then
+                addEvent(self, "Hiding from entity")
+            end
             self.state = "hiding"
             self.vx = 0; self.vy = 0
             self.hidingTimer = self.hidingTimer + dt
@@ -172,6 +173,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
                 self.state = "wandering"
                 self.hidingTimer = 0
                 self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+                addEvent(self, "Gave up hiding, wandering again")
             end
         else
             self.state = "wandering"
@@ -215,7 +217,6 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
                     local len = math.sqrt(dx*dx+dy*dy)
                     if len > 0 then angle = math.atan2(dy, dx) + (love.math.random()-0.5)*0.5 end
                 end
-                -- Despair avoidance
                 if self.profile.despair >= cfg.AVOID_DESPAIR_THRESHOLD then
                     local lookDist = effectiveSpeed * cfg.AVOID_LOOK_AHEAD
                     local probeX = self.x + math.cos(angle) * lookDist
@@ -244,8 +245,6 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
                 self.vx = math.cos(angle) * effectiveSpeed
                 self.vy = math.sin(angle) * effectiveSpeed
             end
-        elseif self.state == "hiding" then
-            -- velocity already zero
         end
 
         -- Collision
@@ -259,27 +258,22 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         self.x = util.clamp(self.x, half, cfg.WORLD_WIDTH - half)
         self.y = util.clamp(self.y, half, cfg.WORLD_HEIGHT - half)
     else
-        -- Frozen or psychotic states
+        -- Frozen / psychotic states
         if self.state == "frozen" then
             self.vx = 0; self.vy = 0
             self.frozenTimer = self.frozenTimer + dt
             if self.frozenTimer >= cfg.FREEZE_DURATION then
-                -- Become corpse
-                self.toRemove = true
-                -- Add corpse at this position (done in game.update after)
-                -- We'll set a flag and handle it in game.update
                 self.becomeCorpse = true
+                addEvent(self, "Froze to death, became a corpse")
             end
         elseif self.state == "psychotic" then
-            -- Wander erratically, fast
             self.wanderTimer = self.wanderTimer + dt
-            if self.wanderTimer >= 0.2 then  -- very frequent direction changes
+            if self.wanderTimer >= 0.2 then
                 self.wanderTimer = 0
                 local angle = love.math.random() * math.pi * 2
                 self.vx = math.cos(angle) * effectiveSpeed * cfg.PSYCHOTIC_SPEED_MULT
                 self.vy = math.sin(angle) * effectiveSpeed * cfg.PSYCHOTIC_SPEED_MULT
             end
-            -- move with collision
             local newX = self.x + self.vx * dt; local newY = self.y + self.vy * dt
             local tx, ty = mapObj.worldToTile(newX, self.y)
             if mapObj.isWalkable(tx, ty) then self.x = newX else self.vx = -self.vx * 0.5 end
@@ -291,11 +285,9 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
 
             self.psychoticTimer = self.psychoticTimer + dt
             if self.psychoticTimer >= cfg.PSYCHOTIC_DURATION then
-                -- Become an entity
-                self.toRemove = true
                 self.becomeEntity = true
+                addEvent(self, "Psychotic break complete, became an entity")
             end
-            -- recovery condition: if in a safe place (light > 0.7) for a while, recover? Not implemented for brevity, but could be added.
         end
     end
 end
@@ -306,7 +298,6 @@ function Denizen:updateDespair(dt, comforts, entities, foods, corpses)
         local d = util.distance(self.x, self.y, lamp.x, lamp.y)
         if d < minDist then minDist = d end
     end
-    -- Comfort effect
     local comfortDelta = 0
     if minDist < cfg.COMFORT_CLOSE then
         comfortDelta = cfg.CLOSE_COMFORT_DELTA * dt
@@ -315,7 +306,6 @@ function Denizen:updateDespair(dt, comforts, entities, foods, corpses)
     end
     self.profile.despair = self.profile.despair + comfortDelta
 
-    -- Entity despair addition
     local entityDespairAdd = 0
     for _, ent in ipairs(entities) do
         if ent.active then
@@ -330,7 +320,6 @@ function Denizen:updateDespair(dt, comforts, entities, foods, corpses)
     end
     self.profile.despair = self.profile.despair + entityDespairAdd
 
-    -- Corpse despair
     for _, corpse in ipairs(corpses) do
         local d = util.distance(self.x, self.y, corpse.x, corpse.y)
         if d <= cfg.CORPSE_DESPAIR_RADIUS then
@@ -338,7 +327,6 @@ function Denizen:updateDespair(dt, comforts, entities, foods, corpses)
         end
     end
 
-    -- Food reduction already applied in update
     self.profile.despair = util.clamp(self.profile.despair, 0, 1)
     return self.profile.despair >= cfg.DESPAIR_MAX or self.profile.despair <= cfg.DESPAIR_MIN
 end

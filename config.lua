@@ -13,7 +13,7 @@ config.WINDOW_WIDTH    = 1200
 config.WINDOW_HEIGHT   = 800
 
 -- ============================================================
---  UI LAYOUT (menu bar, tool panel, status bar)
+--  UI LAYOUT
 -- ============================================================
 config.MENUBAR_HEIGHT  = 36
 config.TOOL_PANEL_WIDTH = 240
@@ -42,9 +42,9 @@ config.TOOL_EXIT   = "exit"
 -- ============================================================
 --  RESOURCE COSTS
 -- ============================================================
-config.BUILD_COST_PER_TILE = 0.05   -- Familiarity spent per floor tile built
-config.ENTITY_COST         = 0.2    -- Unease spent per entity placed
-config.REMOVE_REFUND       = 0.03   -- Familiarity regained per tile removed
+config.BUILD_COST_PER_TILE = 0.05
+config.ENTITY_COST         = 0.2
+config.REMOVE_REFUND       = 0.03
 
 -- ============================================================
 --  STARTING ROOM
@@ -52,7 +52,7 @@ config.REMOVE_REFUND       = 0.03   -- Familiarity regained per tile removed
 config.START_ROOM_RADIUS = 2
 
 -- ============================================================
---  SPAWNING & AI INTERVALS
+--  SPAWNING & AI
 -- ============================================================
 config.SPAWN_INTERVAL        = 15
 config.AI_INTERVAL           = 0.2
@@ -71,38 +71,6 @@ config.AVOID_LOOK_AHEAD        = 1.0
 config.AVOID_STRENGTH          = 2.0
 config.FEAR_DURATION           = 5
 
--- Corpse
-config.CORPSE_DESPAIR_RADIUS = 80
-config.CORPSE_DESPAIR_PER_SEC = 0.1
-
--- Social
-config.SOCIAL_RADIUS = 50          -- denizens within this distance count as "grouped"
-
--- Psychosis
-config.PSYCHOTIC_DURATION = 15     -- seconds before a psychotic denizen becomes an entity
-config.PSYCHOTIC_SPEED_MULT = 2.0  -- how fast they move
-
--- Freeze to corpse
-config.FREEZE_DURATION = 10        -- seconds before a frozen denizen dies
-
--- Denizen names (just a small list)
-config.DENIZEN_NAMES = {
-    "Alan", "Brenda", "Charlie", "Dana", "Eli",
-    "Frankie", "Gary", "Heather", "Ian", "Jasper",
-    "Kael", "Lumen", "Mara", "Nick", "Oscar",
-    "Piper", "Quinn", "Rowan", "Sage", "Thomas",
-    "Andy", "Tim", "Kev", "Jags"
-}
-
--- Personalities (affect behavior slightly)
-config.PERSONALITIES = {
-    brave   = { anxietyMult = 0.7, fleeSpeed = 1.2 },
-    nervous = { anxietyMult = 1.3, hideCooldown = 0.5 },
-    curious = { exploreRange = 1.5 },
-    stoic   = { despairResist = 0.5 },   -- despair rises slower
-    fragile = { despairMult = 1.5 }
-}
-
 -- ============================================================
 --  DESPAIR & COMFORT
 -- ============================================================
@@ -117,26 +85,26 @@ config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
 
 -- ============================================================
---  ENTITY DEFAULTS (placed entities start with these)
+--  ENTITY DEFAULTS
 -- ============================================================
 config.ENTITY_DEFAULTS = {
     speed          = 50,
     radius         = 100,
     despairPerSec  = 0.05,
-    aggression     = 1,           -- 0 = never chase, 1 = always chase within radius
-    lightAvoidance = -1,          -- -1 = flee light, 0 = neutral, +1 = seek light
-    hearingRange   = 300,         -- per‑entity hearing range (pixels)
+    aggression     = 1,
+    lightAvoidance = -1,
+    hearingRange   = 300,
 }
 
 -- ============================================================
---  WITNESS REACTIONS (denizens seeing tile changes)
+--  WITNESS REACTIONS
 -- ============================================================
 config.WITNESS_ANXIETY_SPIKE = 0.4
 config.WITNESS_DESPAIR_SPIKE = 0.3
 config.WITNESS_SIGHT_RANGE   = 200
 
 -- ============================================================
---  RESOURCE LOOP (Familiarity, Unease, Dread)
+--  RESOURCE LOOP
 -- ============================================================
 config.FAMILIARITY_SPAWN_MULT = 2.0
 config.UNEASE_SPEED_BOOST     = 0.5
@@ -148,14 +116,14 @@ config.DREAD_SPAWN_CHANCE     = 0.5
 config.DREAD_SPAWN_MIN_LIGHT  = 0.1
 
 -- ============================================================
---  FOOD (reduces despair & anxiety)
+--  FOOD
 -- ============================================================
 config.FOOD_RADIUS            = 60
 config.FOOD_DESPAIR_REDUCTION = 0.05
 config.FOOD_ANXIETY_REDUCTION = 0.05
 
 -- ============================================================
---  EXITS (denizens escape here)
+--  EXITS
 -- ============================================================
 config.EXIT_DETECTION_RANGE   = 250
 config.EXIT_ESCAPE_DISTANCE   = 20
@@ -164,7 +132,7 @@ config.EXIT_FAMILIARITY_BOOST = 0.1
 -- ============================================================
 --  LIGHTING
 -- ============================================================
-config.LIGHT_DECAY_PER_TILE = 0.15
+config.LIGHT_DECAY_PER_TILE = 0.25
 config.LIGHT_MIN_AMBIENT    = 0.03
 
 -- ============================================================
@@ -179,17 +147,41 @@ config.COL_ENTITY_RADIUS = {0.4, 0.27, 0.53, 0.2}
 config.DENIZEN_COLOR_LOW  = {0.53, 0.67, 0.8}
 config.DENIZEN_COLOR_HIGH = {0.8, 0.2, 0.2}
 
--- UI colours
+-- UI
 config.COL_UI_BG         = {0.17, 0.17, 0.17}
 config.COL_UI_TEXT       = {0.8, 0.8, 0.8}
 config.COL_UI_BUTTON     = {0.3, 0.3, 0.3}
-config.COL_UI_BUTTON_HI  = {0.45, 0.45, 0.3}   -- selected / hover
-config.COL_UI_BEVEL_HI   = {0.6, 0.6, 0.6}     -- bevel light edge
-config.COL_UI_BEVEL_LO   = {0.1, 0.1, 0.1}     -- bevel dark edge
+config.COL_UI_BUTTON_HI  = {0.45, 0.45, 0.3}
+config.COL_UI_BEVEL_HI   = {0.6, 0.6, 0.6}
+config.COL_UI_BEVEL_LO   = {0.1, 0.1, 0.1}
 
--- Slider style
 config.SLIDER_TRACK_COLOR = {0.4, 0.4, 0.4}
 config.SLIDER_HANDLE_W    = 12
 config.SLIDER_HANDLE_COLOR = {0.6, 0.6, 0.6}
+
+-- ============================================================
+--  CORPSE & PSYCHOTIC
+-- ============================================================
+config.CORPSE_DESPAIR_RADIUS = 80
+config.CORPSE_DESPAIR_PER_SEC = 0.1
+config.SOCIAL_RADIUS = 50
+config.PSYCHOTIC_DURATION = 15
+config.PSYCHOTIC_SPEED_MULT = 2.0
+config.FREEZE_DURATION = 10
+
+config.DENIZEN_NAMES = {
+    "Alan", "Brenda", "Charlie", "Dana", "Eli",
+    "Frankie", "Glitch", "Hollow", "Ivy", "Jasper",
+    "Kael", "Lumen", "Mara", "Nyx", "Oscar",
+    "Piper", "Quinn", "Rowan", "Sage", "Thorn"
+}
+
+config.PERSONALITIES = {
+    brave   = { anxietyMult = 0.7, fleeSpeed = 1.2 },
+    nervous = { anxietyMult = 1.3, hideCooldown = 0.5 },
+    curious = { exploreRange = 1.5 },
+    stoic   = { despairResist = 0.5 },
+    fragile = { despairMult = 1.5 }
+}
 
 return config

@@ -1,10 +1,10 @@
 -- audio.lua
--- Data-driven sound manager. Add new sounds by editing the `sounds` table.
+-- Hard-coded sound manager for absolute reliability.
 
 local audio = {}
 local managedSources = {}
 local lampLoops = {}
-local lampHumSource  -- special: prototype for cloned lamp hums (mono)
+local lampHumSource  -- prototype for cloned lamp hums (mono)
 
 -- ============================================================
 --  Tiny helpers
@@ -36,126 +36,102 @@ local function toMono(soundData)
 end
 
 -- ============================================================
---  Sound registry – just add entries here to create a new sound
--- ============================================================
-local sounds = {
-    build = {
-        file = "sounds/squelch.mp3",
-        fallback = { freq = 220, duration = 0.4, loop = false },
-        stopFunc = true,   -- creates stopBuildSound()
-    },
-    lampPlace = {
-        file = "sounds/light_on.wav",
-        fallback = { freq = 440, duration = 0.2 },
-    },
-    entityPlace = {
-        file = "sounds/slime_monster_1.wav",
-        fallback = { freq = 880, duration = 0.1 },
-    },
-    -- Chase sound – key "roar" → playRoarSound() & stopRoarSound()
-    entityChase = {
-        file = "sounds/roar.mp3",
-        fallback = { freq = 980, duration = 0.3, loop = true },
-        mono = true,
-        stopFunc = true,
-    },
-    -- Denizen enter/leave – key "denizenEnterLeave" → playDenizenEnterLeaveSound()
-    denizenEnterLeave = {
-        file = "sounds/noclip.mp3",
-        fallback = nil,   -- no fallback
-        stopFunc = true,  -- creates stopDenizenEnterLeaveSound()
-    },
-    foodPlace = {
-        file = "sounds/noclip.mp3",
-        fallback = nil,
-        stopFunc = false,
-    },
-    exitPlace = {
-        file = "sounds/noclip.mp3",
-        fallback = nil,
-        stopFunc = false,
-    },
-}
-
--- This will hold the loaded sources, keyed by sound name
-audio.sources = {}
-
--- ============================================================
---  Load everything automatically
+--  Load all sound files
 -- ============================================================
 function audio.load()
-    for name, snd in pairs(sounds) do
-        local source = nil
-
-        -- Try to load the file
-        if snd.file and love.filesystem.getInfo(snd.file) then
-            if snd.mono then
-                local sd = love.sound.newSoundData(snd.file)
-                local monoSD = toMono(sd)
-                source = love.audio.newSource(monoSD)
-                if snd.fallback and snd.fallback.loop then
-                    source:setLooping(true)
-                end
-            else
-                source = love.audio.newSource(snd.file, "static")
-            end
-            print("Loaded " .. name .. " sound: " .. snd.file)
-        elseif snd.fallback then
-            print(name .. " sound not found, using fallback tone.")
-            source = generateTone(snd.fallback.freq, snd.fallback.duration, snd.fallback.loop)
-        else
-            print(name .. " sound not found – skipping.")
+    local function safeLoad(filename)
+        if love.filesystem.getInfo(filename) then
+            local src = love.audio.newSource(filename, "static")
+            table.insert(managedSources, src)
+            return src
         end
-
-        if source then
-            audio.sources[name] = source
-            table.insert(managedSources, source)
-
-            -- Create play function: audio.play<Name>Sound()
-            local playName = "play" .. name:sub(1,1):upper() .. name:sub(2) .. "Sound"
-            audio[playName] = function()
-                if audio.sources[name] then
-                    print("Playing " .. name .. " sound")
-                    audio.sources[name]:stop()
-                    audio.sources[name]:play()
-                end
-            end
-
-            -- Create stop function if requested: audio.stop<Name>Sound()
-            if snd.stopFunc then
-                local stopName = "stop" .. name:sub(1,1):upper() .. name:sub(2) .. "Sound"
-                audio[stopName] = function()
-                    if audio.sources[name] then
-                        print("Stopping " .. name .. " sound")
-                        audio.sources[name]:stop()
-                    end
-                end
-            end
-        end
+        return nil
     end
 
-    -- ============================================================
-    --  Lamp hum – special because it gets cloned for each lamp
-    -- ============================================================
+    audio.buildSound = safeLoad("sounds/squelch.mp3") or generateTone(220, 0.4, false)
+    audio.lampPlaceSound = safeLoad("sounds/light_on.wav") or generateTone(440, 0.2, false)
+    audio.entityPlaceSound = safeLoad("sounds/slime_monster_1.wav") or generateTone(880, 0.1, false)
+
+    -- Chase sound (roar)
+    local roarFile = "sounds/roar.mp3"
+    if love.filesystem.getInfo(roarFile) then
+        local sd = love.sound.newSoundData(roarFile)
+        local monoSD = toMono(sd)
+        audio.roarSound = love.audio.newSource(monoSD)
+        table.insert(managedSources, audio.roarSound)
+    else
+        audio.roarSound = generateTone(980, 0.3, true)
+    end
+
+    -- Denizen enter/leave sound (noclip)
+    local noclipFile = "sounds/noclip.mp3"
+    if love.filesystem.getInfo(noclipFile) then
+        audio.noclipSound = safeLoad(noclipFile)
+    else
+        audio.noclipSound = nil
+    end
+
+    -- Food place sound
+    audio.foodPlaceSound = safeLoad("sounds/food_place.mp3")
+    -- Exit place sound
+    audio.exitPlaceSound = safeLoad("sounds/exit_place.mp3")
+
+    -- Lamp hum (mono for spatial cloning)
     local humFile = "sounds/light_hum.wav"
     if love.filesystem.getInfo(humFile) then
         local sd = love.sound.newSoundData(humFile)
         local monoSD = toMono(sd)
         lampHumSource = love.audio.newSource(monoSD)
         lampHumSource:setLooping(true)
-        print("Loaded lamp hum: " .. humFile)
     else
-        print("Lamp hum not found, using fallback low drone.")
         lampHumSource = generateTone(55, 2, true)
     end
 end
 
 -- ============================================================
---  Manually written functions (lamp hum, pause, etc.)
+--  Explicit sound functions
+-- ============================================================
+function audio.playBuildSound()
+    if audio.buildSound then audio.buildSound:stop(); audio.buildSound:play() end
+end
+function audio.stopBuildSound()
+    if audio.buildSound then audio.buildSound:stop() end
+end
+
+function audio.playLampPlaceSound()
+    if audio.lampPlaceSound then audio.lampPlaceSound:stop(); audio.lampPlaceSound:play() end
+end
+
+function audio.playEntityPlaceSound()
+    if audio.entityPlaceSound then audio.entityPlaceSound:stop(); audio.entityPlaceSound:play() end
+end
+
+function audio.playRoarSound()
+    if audio.roarSound then audio.roarSound:stop(); audio.roarSound:play() end
+end
+function audio.stopRoarSound()
+    if audio.roarSound then audio.roarSound:stop() end
+end
+
+function audio.playDenizenEnterLeaveSound()
+    if audio.noclipSound then audio.noclipSound:stop(); audio.noclipSound:play() end
+end
+function audio.stopDenizenEnterLeaveSound()
+    if audio.noclipSound then audio.noclipSound:stop() end
+end
+
+function audio.playFoodPlaceSound()
+    if audio.foodPlaceSound then audio.foodPlaceSound:stop(); audio.foodPlaceSound:play() end
+end
+function audio.playExitPlaceSound()
+    if audio.exitPlaceSound then audio.exitPlaceSound:stop(); audio.exitPlaceSound:play() end
+end
+
+-- ============================================================
+--  Lamp hum (cloned per lamp)
 -- ============================================================
 function audio.addLampLoop(lamp)
     if not lampHumSource then return end
-    print("Adding lamp loop for lamp at " .. lamp.x .. "," .. lamp.y)
     local source = lampHumSource:clone()
     source:setLooping(true)
     source:setRelative(true)
@@ -167,7 +143,6 @@ end
 function audio.removeLampLoop(lamp)
     for i, entry in ipairs(lampLoops) do
         if entry.lamp == lamp then
-            print("Removing lamp loop for lamp at " .. lamp.x .. "," .. lamp.y)
             entry.source:stop()
             for j, src in ipairs(managedSources) do
                 if src == entry.source then
@@ -191,10 +166,12 @@ function audio.updateLampLoops(cameraX, cameraY, zoom, gameWidth, gameHeight)
         local dist = math.sqrt(dx*dx + dy*dy)
         local vol = math.max(0, 1 - dist / maxDist)
         source:setVolume(vol)
-        -- source:setPosition(dx, dy, 0)  -- re-enable if mono spatial works
     end
 end
 
+-- ============================================================
+--  Pause / Resume
+-- ============================================================
 function audio.pauseAll()
     for _, src in ipairs(managedSources) do
         if src then
@@ -215,6 +192,14 @@ function audio.resumeAll()
     end
 end
 
+-- wrapper (cannot remember what was the original name of this function)
+function audio.playEntityChaseSound()
+    audio.playRoarSound()
+end
+
+function audio.stopEntityChaseSound()
+    audio.stopRoarSound()
+end
 
 
 return audio

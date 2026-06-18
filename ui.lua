@@ -9,8 +9,8 @@ local audio   = require("audio")
 local ui = {}
 
 -- ========== STATE ==========
-local buttons = {}        -- right‑panel buttons
-local sliders = {}        -- entity editor sliders
+local buttons = {}
+local sliders = {}
 local sliderDrag = nil
 local dragStart = nil
 local dragging = false
@@ -23,9 +23,10 @@ local hoverTileX, hoverTileY = nil, nil
 
 -- Menu state
 local menuOpen = false
+local viewMenuOpen = false
 ui.mouseX, ui.mouseY = 0, 0
 
--- ========== RESOURCE CLAMPING (must be defined before use) ==========
+-- ========== RESOURCE CLAMPING ==========
 local function clampBuildRect()
     if not isDraggingBuild or activeTool ~= cfg.TOOL_BUILD then return end
     local startTX, startTY = dragBuildStart[1], dragBuildStart[2]
@@ -137,8 +138,7 @@ function ui.mousepressed(mx, my, button)
 
     -- ==== Dropdown menu items (if open) ====
     if menuOpen then
-        local fileBtnX = 5
-        local dropdownX = fileBtnX
+        local dropdownX = 5
         local dropdownY = cfg.MENUBAR_HEIGHT
         local dropdownW = 120
         local itemH = 20
@@ -161,12 +161,44 @@ function ui.mousepressed(mx, my, button)
         return
     end
 
-    -- ==== Menu bar (top) – File button ====
+    if viewMenuOpen then
+        local dropdownX = 55
+        local dropdownY = cfg.MENUBAR_HEIGHT
+        local dropdownW = 120  -- widened to fit "Achievements"
+        local itemH = 20
+        local items = {"Log", "Achievements"}
+        for i, item in ipairs(items) do
+            local iy = dropdownY + (i-1) * itemH
+            if mx >= dropdownX and mx <= dropdownX + dropdownW and my >= iy and my <= iy + itemH then
+                if item == "Log" then
+                    local logviewer = require("logviewer")
+                    logviewer.open = true
+                elseif item == "Achievements" then
+                    local achievements = require("achievements")
+                    achievements.open = true
+                end
+                viewMenuOpen = false
+                return
+            end
+        end
+        viewMenuOpen = false
+        return
+    end
+
+    -- ==== Menu bar (top) – File / View buttons ====
     if my <= cfg.MENUBAR_HEIGHT then
         local fileBtnX = 5
         local fileBtnW = 50
         if mx >= fileBtnX and mx <= fileBtnX + fileBtnW then
             menuOpen = true
+            viewMenuOpen = false
+            return
+        end
+        local viewBtnX = 55
+        local viewBtnW = 50
+        if mx >= viewBtnX and mx <= viewBtnX + viewBtnW then
+            viewMenuOpen = true
+            menuOpen = false
             return
         end
         return
@@ -220,7 +252,6 @@ function ui.mousereleased(mx, my, button)
         if rect then
             local fillType = (activeTool == cfg.TOOL_BUILD) and cfg.FLOOR or cfg.VOID
 
-            -- Resource check for building
             if activeTool == cfg.TOOL_BUILD then
                 local tilesToBuild = 0
                 for x = rect.x1, rect.x2 do
@@ -229,7 +260,6 @@ function ui.mousereleased(mx, my, button)
                     end
                 end
                 if game.familiarityResource < tilesToBuild * cfg.BUILD_COST_PER_TILE then
-                    -- Not enough resource, abort
                     isDraggingBuild = false; dragBuildStart = nil; dragBuildCurrent = nil
                     dragging = false; sliderDrag = nil
                     return
@@ -290,8 +320,7 @@ function ui.mousereleased(mx, my, button)
                 end
             elseif activeTool == cfg.TOOL_FOOD then
                 game.addFood(px, py)
-            elseif activeTool == cfg.TOOL_EXIT then
-                game.addExit(px, py)
+            -- Exit placement removed
             end
         end
     end
@@ -320,7 +349,7 @@ function ui.mousemoved(mx, my, dx, dy)
         local tx, ty = map.worldToTile(wx, wy)
         if tx and ty and tx >= 1 and tx <= cfg.MAP_COLS and ty >= 1 and ty <= cfg.MAP_ROWS then
             dragBuildCurrent = {tx, ty}
-            clampBuildRect()   -- now safe because defined above
+            clampBuildRect()
         end
     end
     if not isDraggingBuild and activeTool ~= cfg.TOOL_NONE then
@@ -360,6 +389,11 @@ function ui.draw(efficiency, denizenCount)
     local fileBtnH = cfg.MENUBAR_HEIGHT - 2
     bevelButton(fileBtnX, 1, fileBtnW, fileBtnH, "File", menuOpen)
 
+    local viewBtnX = 55
+    local viewBtnW = 50
+    bevelButton(viewBtnX, 1, viewBtnW, fileBtnH, "View", viewMenuOpen)
+
+    -- File dropdown
     if menuOpen then
         local dropdownX = fileBtnX
         local dropdownY = cfg.MENUBAR_HEIGHT
@@ -383,7 +417,31 @@ function ui.draw(efficiency, denizenCount)
         end
     end
 
-    -- ====== BOTTOM STATUS BAR (full width) ======
+    -- View dropdown
+    if viewMenuOpen then
+        local dropdownX = viewBtnX
+        local dropdownY = cfg.MENUBAR_HEIGHT
+        local dropdownW = 120
+        local itemH = 20
+        local items = {"Log", "Achievements"}
+        love.graphics.setColor(cfg.COL_UI_BG)
+        love.graphics.rectangle("fill", dropdownX, dropdownY, dropdownW, itemH * #items)
+        bevelBox(dropdownX, dropdownY, dropdownW, itemH * #items, false)
+        for i, item in ipairs(items) do
+            local iy = dropdownY + (i-1) * itemH
+            local hover = false
+            if ui.mouseX >= dropdownX and ui.mouseX <= dropdownX + dropdownW
+               and ui.mouseY >= iy and ui.mouseY <= iy + itemH then
+                hover = true
+            end
+            love.graphics.setColor(hover and cfg.COL_UI_BUTTON_HI or cfg.COL_UI_BUTTON)
+            love.graphics.rectangle("fill", dropdownX+2, iy+1, dropdownW-4, itemH-2)
+            love.graphics.setColor(cfg.COL_UI_TEXT)
+            love.graphics.print(item, dropdownX+6, iy+3)
+        end
+    end
+
+    -- ====== BOTTOM STATUS BAR ======
     local sbY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT
     love.graphics.setColor(cfg.COL_UI_BG)
     love.graphics.rectangle("fill", 0, sbY, cfg.WINDOW_WIDTH, cfg.STATUSBAR_HEIGHT)
@@ -419,7 +477,7 @@ function ui.draw(efficiency, denizenCount)
     local pauseY = sbY + barH - pauseH - 2
     bevelButton(pauseX, pauseY, pauseW, pauseH, game.paused and "Resume" or "Pause", false)
 
-    -- ====== RIGHT PANEL (tools & entity editor) ======
+    -- ====== RIGHT PANEL ======
     love.graphics.setColor(cfg.COL_UI_BG)
     love.graphics.rectangle("fill", panelX, cfg.MENUBAR_HEIGHT, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT)
     bevelBox(panelX, cfg.MENUBAR_HEIGHT, cfg.TOOL_PANEL_WIDTH, cfg.GAME_HEIGHT, true)
@@ -433,7 +491,6 @@ function ui.draw(efficiency, denizenCount)
 
     buttons = {}
     sliders = {}
-
     local bw = cfg.TOOL_PANEL_WIDTH - 20
 
     local toolDefs = {
@@ -443,7 +500,6 @@ function ui.draw(efficiency, denizenCount)
         { "Build", cfg.TOOL_BUILD },
         { "Remove", cfg.TOOL_REMOVE },
         { "Food", cfg.TOOL_FOOD },
-        { "Exit", cfg.TOOL_EXIT },
     }
     for _, def in ipairs(toolDefs) do
         local bh = 20
@@ -488,7 +544,7 @@ function ui.draw(efficiency, denizenCount)
     local hovered = game.hoveredObject
     if hovered then
         local mx, my = ui.mouseX, ui.mouseY
-        local tipW, tipH = 130, 80
+        local tipW, tipH = 130, 96
         local tipX = mx + 16
         local tipY = my + 16
         if tipX + tipW > cfg.GAME_WIDTH then tipX = mx - tipW - 16 end
@@ -507,7 +563,7 @@ function ui.draw(efficiency, denizenCount)
             love.graphics.print(string.format("Desp/s:%.2f Agg:%.2f", e.despairPerSec, e.aggression), tipX+4, tipY+46)
         elseif hovered.type == "denizen" then
             local d = hovered.data
-            love.graphics.print(d.name, tipX+4, tipY+4)   -- <-- name here
+            love.graphics.print(d.name, tipX+4, tipY+4)
             love.graphics.print("State: " .. d.state, tipX+4, tipY+18)
             love.graphics.print(string.format("Desp:%.2f Anx:%.2f", d.profile.despair, d.profile.anxiety), tipX+4, tipY+32)
             love.graphics.print(string.format("Speed:%.0f", d.profile.speed), tipX+4, tipY+46)
@@ -515,6 +571,8 @@ function ui.draw(efficiency, denizenCount)
             love.graphics.print("Food", tipX+4, tipY+4)
         elseif hovered.type == "exit" then
             love.graphics.print("Exit", tipX+4, tipY+4)
+        elseif hovered.type == "corpse" then
+            love.graphics.print("Corpse", tipX+4, tipY+4)
         end
     end
 end

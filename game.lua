@@ -6,6 +6,7 @@ local Entity  = require("entity")
 local effects = require("effects")
 local audio   = require("audio")
 local util    = require("util")
+local logger  = require("logger")
 
 local game = {}
 
@@ -40,7 +41,7 @@ game.familiarityResource = 1.0
 game.uneaseResource      = 1.0
 
 -- ============================================================
---  Helpers (save/load, removal, hover)
+--  Helpers
 -- ============================================================
 local function comfortToTable(c)
     return { x = c.x, y = c.y }
@@ -72,6 +73,7 @@ local function denizenToTable(d)
         lastChaserPos = d.lastChaserPos,
         frozenTimer = d.frozenTimer,
         psychoticTimer = d.psychoticTimer,
+        events = d.events,   -- not needed to save but can be saved
     }
 end
 
@@ -91,7 +93,6 @@ local function denizenFromTable(dd)
     den.vx = dd.vx; den.vy = dd.vy; den.state = dd.state
     den.name = dd.name or "Unknown"
     den.personality = dd.personality or "brave"
-    -- re-apply personality data
     den.persData = cfg.PERSONALITIES[den.personality] or {}
     den.profile.anxiety = dd.profile.anxiety; den.profile.despair = dd.profile.despair
     den.profile.speed = dd.profile.speed
@@ -101,6 +102,7 @@ local function denizenFromTable(dd)
     den.lastChaserPos = dd.lastChaserPos or nil
     den.frozenTimer = dd.frozenTimer or 0
     den.psychoticTimer = dd.psychoticTimer or 0
+    den.events = dd.events or {}
     return den
 end
 
@@ -113,6 +115,14 @@ local function removeFromList(list, tx, ty, beforeRemove)
             table.remove(list, i)
         end
     end
+end
+
+local function removeDenizen(index, cause)
+    local den = game.denizens[index]
+    if den.events and #den.events > 0 then
+        logger.logDenizen(den.name, den.personality, den.events, cause)
+    end
+    table.remove(game.denizens, index)
 end
 
 -- ============================================================
@@ -171,10 +181,16 @@ function game.clearTile(tileX, tileY)
     local tx, ty = tileX, tileY
     removeFromList(game.comforts, tx, ty, function(c) audio.removeLampLoop(c) end)
     removeFromList(game.entities, tx, ty, function(e) effects.addObjectFade("entity", e.x, e.y, 1, 1) end)
-    removeFromList(game.denizens, tx, ty, function(d)
-        effects.addObjectFade("denizen", d.x, d.y, 1, 1)
-        audio.playDenizenEnterLeaveSound()
-    end)
+    -- Denizens removed via tile clearing are logged
+    for i = #game.denizens, 1, -1 do
+        local d = game.denizens[i]
+        local ix, iy = map.worldToTile(d.x, d.y)
+        if ix == tx and iy == ty then
+            effects.addObjectFade("denizen", d.x, d.y, 1, 1)
+            removeDenizen(i, "tile removed by player")
+            audio.playDenizenEnterLeaveSound()
+        end
+    end
     removeFromList(game.foods,   tx, ty)
     removeFromList(game.exits,   tx, ty)
     removeFromList(game.corpses, tx, ty)
@@ -217,22 +233,22 @@ function game.update(dt)
         end
     end
 
-    -- Handle denizen outcomes (corpses, entities from psychosis)
+    -- Handle outcomes
     for i = #game.denizens, 1, -1 do
         local den = game.denizens[i]
         if den.becomeCorpse then
+            removeDenizen(i, "became a corpse")
             table.insert(game.corpses, {x = den.x, y = den.y})
-            table.remove(game.denizens, i)
         elseif den.becomeEntity then
+            removeDenizen(i, "became an entity")
             game.addEntity(den.x, den.y)
-            table.remove(game.denizens, i)
         end
     end
 
     -- Remove escapees / toRemove
     for i = #game.denizens, 1, -1 do
         if game.denizens[i].toRemove then
-            table.remove(game.denizens, i)
+            removeDenizen(i, "escaped")
         end
     end
 
@@ -247,13 +263,13 @@ function game.update(dt)
             local den = game.denizens[i]
             if den:updateDespair(cfg.AI_INTERVAL, game.comforts, game.entities, game.foods, game.corpses) then
                 effects.addObjectFade("denizen", den.x, den.y, 1, 1)
-                table.remove(game.denizens, i)
+                removeDenizen(i, "despair min/max")
                 audio.playDenizenEnterLeaveSound()
             end
         end
     end
 
-    -- Compute global resources (with social + light for familiarity)
+    -- Compute global resources (social + light)
     local totalFamiliarityScore = 0
     local totalAnxiety = 0
     local totalDespair = 0
@@ -272,7 +288,6 @@ function game.update(dt)
         local targetUnease = math.max(0, math.min(1, totalAnxiety / denCount))
         local targetDread = math.max(0, math.min(1, totalDespair / denCount))
 
-        -- Smooth resource changes (max 0.05 per second)
         local maxChange = 0.05 * dt
         game.familiarity = game.familiarity + util.clamp(targetFamiliarity - game.familiarity, -maxChange, maxChange)
         game.unease = game.unease + util.clamp(targetUnease - game.unease, -maxChange, maxChange)
@@ -281,6 +296,15 @@ function game.update(dt)
         game.familiarity = 0
         game.unease = 0
         game.dread = 0
+    end
+
+    -- Perfect equilibrium tracking (all three between 0.4 and 0.6)
+    if game.familiarity >= 0.4 and game.familiarity <= 0.6
+       and game.unease >= 0.4 and game.unease <= 0.6
+       and game.dread >= 0.4 and game.dread <= 0.6 then
+        game.perfectEquilibriumTimer = (game.perfectEquilibriumTimer or 0) + dt
+    else
+        game.perfectEquilibriumTimer = 0
     end
 
     -- Dread entity spawning
