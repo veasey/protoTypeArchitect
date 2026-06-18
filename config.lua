@@ -54,8 +54,8 @@ config.START_ROOM_RADIUS = 2
 -- ============================================================
 --  SPAWNING & AI
 -- ============================================================
-config.SPAWN_INTERVAL        = 15
-config.AI_INTERVAL           = 0.2
+config.SPAWN_INTERVAL        = 20
+config.AI_INTERVAL           = 0.1
 config.DENIZEN_SPAWN_MIN_LIGHT = 0.3
 
 -- ============================================================
@@ -74,13 +74,13 @@ config.FEAR_DURATION           = 5
 -- ============================================================
 --  DESPAIR & COMFORT
 -- ============================================================
-config.BASE_DESPAIR_RATE   = 0.02
+config.BASE_DESPAIR_RATE   = 0.01
 config.COMFORT_CLOSE       = 80
 config.COMFORT_FAR         = 150
-config.CLOSE_COMFORT_DELTA = -0.04
-config.FAR_COMFORT_DELTA   = -0.01
-config.DESPAIR_MIN         = 0.05
-config.DESPAIR_MAX         = 0.95
+config.CLOSE_COMFORT_DELTA = -0.02
+config.FAR_COMFORT_DELTA   = -0.005
+config.DESPAIR_MIN         = 0.01
+config.DESPAIR_MAX         = 0.99
 config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
 
@@ -88,8 +88,8 @@ config.SWEET_SPOT_HIGH     = 0.7
 --  ENTITY DEFAULTS
 -- ============================================================
 config.ENTITY_DEFAULTS = {
-    speed          = 50,
-    radius         = 100,
+    speed          = 35,
+    radius         = 60,
     despairPerSec  = 0.05,
     aggression     = 1,
     lightAvoidance = -1,
@@ -132,7 +132,7 @@ config.EXIT_FAMILIARITY_BOOST = 0.1
 -- ============================================================
 --  LIGHTING
 -- ============================================================
-config.LIGHT_DECAY_PER_TILE = 0.25
+config.LIGHT_DECAY_PER_TILE = 0.2
 config.LIGHT_MIN_AMBIENT    = 0.03
 
 -- ============================================================
