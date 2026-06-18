@@ -1,27 +1,27 @@
--- achievements.lua
-local achievements = {
-    open = false,
-    x = 100, y = 100,
-    width = 500, height = 340,
-    dragging = false, dragOffX = 0, dragOffY = 0,
-    earned = {},
-    titles = {
-        maxFamiliarity = "Blinding Comfort",
-        maxDread = "Abyssal Dread",
-        maxAnxiety = "Panic's Peak",
-        perfectEquilibrium = "The Golden Mean",
-    },
-    descriptions = {
-        maxFamiliarity = "Reach maximum Familiarity",
-        maxDread = "Reach maximum Dread",
-        maxAnxiety = "Reach maximum Unease",
-        perfectEquilibrium = "Balance all resources for 60s",
-    },
-    notifications = {},   -- { text, timer, alpha }
-    NOTIFICATION_DURATION = 5,  -- seconds
-}
+local PopupWindow = require("popups.popupwindow")
 
--- add a new achievement notification
+local achievements = PopupWindow.create({
+    title = "Achievements",
+    width = 500,
+    height = 340,
+    hasMaximize = false,
+})
+achievements.earned = {}
+achievements.titles = {
+    maxFamiliarity = "Blinding Comfort",
+    maxDread = "Abyssal Dread",
+    maxAnxiety = "Panic's Peak",
+    perfectEquilibrium = "The Golden Mean",
+}
+achievements.descriptions = {
+    maxFamiliarity = "Reach maximum Familiarity",
+    maxDread = "Reach maximum Dread",
+    maxAnxiety = "Reach maximum Unease",
+    perfectEquilibrium = "Balance all resources for 60s",
+}
+achievements.notifications = {}
+achievements.NOTIFICATION_DURATION = 5
+
 function achievements.addNotification(text)
     table.insert(achievements.notifications, {
         text = text,
@@ -31,7 +31,6 @@ function achievements.addNotification(text)
 end
 
 function achievements.check(gameState)
-    -- check each achievement, fire notification when first earned
     if not achievements.earned.maxFamiliarity and gameState.familiarity >= 0.99 then
         achievements.earned.maxFamiliarity = true
         achievements.addNotification("Achievement: Blinding Comfort")
@@ -51,21 +50,19 @@ function achievements.check(gameState)
 end
 
 function achievements.update(dt)
-    -- update notification timers and fade out
     for i = #achievements.notifications, 1, -1 do
         local notif = achievements.notifications[i]
         notif.timer = notif.timer - dt
         if notif.timer <= 0 then
             table.remove(achievements.notifications, i)
         else
-            notif.alpha = math.min(1, notif.timer / 1.5)  -- fade over last 1.5s
+            notif.alpha = math.min(1, notif.timer / 1.5)
         end
     end
 end
 
 function achievements.drawNotifications()
     if #achievements.notifications == 0 then return end
-    -- draw at top center of window
     local maxWidth = 0
     for _, notif in ipairs(achievements.notifications) do
         local w = love.graphics.getFont():getWidth(notif.text)
@@ -73,10 +70,9 @@ function achievements.drawNotifications()
     end
     local boxW = maxWidth + 20
     local boxH = 20 + #achievements.notifications * 18
-    local boxX = (1200 - 280) / 2 - boxW / 2   -- center of game area (excluding right panel)
+    local boxX = (1200 - 280) / 2 - boxW / 2
     local boxY = 50
 
-    -- translucent background
     love.graphics.setColor(0, 0, 0, 0.7)
     love.graphics.rectangle("fill", boxX, boxY, boxW, boxH)
     love.graphics.setColor(1, 1, 0, 0.5)
@@ -90,53 +86,23 @@ end
 
 function achievements.mousepressed(mx, my, button)
     if not mx or not my then return end
-    if not achievements.open then return end
-    -- close button
-    if mx >= achievements.x + achievements.width - 20 and mx <= achievements.x + achievements.width - 5
-       and my >= achievements.y + 5 and my <= achievements.y + 20 then
-        achievements.open = false
-        return true
-    end
-    -- title bar drag
-    if my <= achievements.y + 20 then
-        achievements.dragging = true
-        achievements.dragOffX = mx - achievements.x
-        achievements.dragOffY = my - achievements.y
-        return true
-    end
-    return true
+    if not achievements.open then return false end
+    return PopupWindow.mousepressed(achievements, mx, my, button)
 end
 
 function achievements.mousereleased(mx, my, button)
-    achievements.dragging = false
+    PopupWindow.mousereleased(achievements, mx, my, button)
 end
 
 function achievements.mousemoved(mx, my, dx, dy)
-    if achievements.dragging then
-        achievements.x = mx - achievements.dragOffX
-        achievements.y = my - achievements.dragOffY
-    end
+    PopupWindow.mousemoved(achievements, mx, my, dx, dy)
 end
 
 function achievements.draw()
     if not achievements.open then return end
-    local x, y, w, h = achievements.x, achievements.y, achievements.width, achievements.height
-    -- translucent background
-    love.graphics.setColor(0.1, 0.1, 0.1, 0.85)
-    love.graphics.rectangle("fill", x, y, w, h)
-    love.graphics.setColor(0.6, 0.6, 0.6, 0.9)
-    love.graphics.rectangle("line", x, y, w, h)
-    -- title bar
-    love.graphics.setColor(0.3, 0.3, 0.3, 0.9)
-    love.graphics.rectangle("fill", x, y, w, 20)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Achievements", x+5, y+3)
-    -- close button
-    love.graphics.setColor(0.8, 0.2, 0.2)
-    love.graphics.rectangle("fill", x+w-20, y+5, 15, 12)
-    love.graphics.print("X", x+w-17, y+4)
+    PopupWindow.drawBackground(achievements)
 
-    -- badges in a 2x2 grid
+    local x, y, w, h = achievements.x, achievements.y, achievements.width, achievements.height
     local badgeW = (w - 30) / 2
     local badgeH = (h - 40) / 2
     local startX = x + 10
@@ -149,19 +115,15 @@ function achievements.draw()
         local by = startY + row * (badgeH + 10)
         local earned = achievements.earned[key] or false
 
-        -- badge background
         love.graphics.setColor(earned and {0.15, 0.4, 0.15} or {0.25, 0.25, 0.25})
         love.graphics.rectangle("fill", bx, by, badgeW, badgeH)
         love.graphics.setColor(earned and {0.4, 0.8, 0.4} or {0.5, 0.5, 0.5})
         love.graphics.rectangle("line", bx, by, badgeW, badgeH)
 
-        -- title
         love.graphics.setColor(earned and {1, 1, 0.8} or {0.7, 0.7, 0.7})
         love.graphics.print(achievements.titles[key], bx+4, by+4)
-        -- description
         love.graphics.setColor(0.9, 0.9, 0.9)
         love.graphics.print(achievements.descriptions[key], bx+4, by+20)
-        -- status
         if earned then
             love.graphics.setColor(0.2, 1, 0.2)
             love.graphics.print("EARNED", bx+4, by+badgeH-16)

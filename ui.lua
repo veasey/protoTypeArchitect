@@ -166,16 +166,19 @@ function ui.mousepressed(mx, my, button)
         local dropdownY = cfg.MENUBAR_HEIGHT
         local dropdownW = 120  -- widened to fit "Achievements"
         local itemH = 20
-        local items = {"Log", "Achievements"}
+        local items = {"Log", "Achievements", "About"}
         for i, item in ipairs(items) do
             local iy = dropdownY + (i-1) * itemH
             if mx >= dropdownX and mx <= dropdownX + dropdownW and my >= iy and my <= iy + itemH then
                 if item == "Log" then
-                    local logviewer = require("logviewer")
+                    local logviewer = require("popups.logviewer")
                     logviewer.open = true
                 elseif item == "Achievements" then
-                    local achievements = require("achievements")
+                    local achievements = require("popups.achievements")
                     achievements.open = true
+                elseif item == "About" then
+                    local about = require("popups.about")
+                    about.open = true
                 end
                 viewMenuOpen = false
                 return
@@ -423,7 +426,7 @@ function ui.draw(efficiency, denizenCount)
         local dropdownY = cfg.MENUBAR_HEIGHT
         local dropdownW = 120
         local itemH = 20
-        local items = {"Log", "Achievements"}
+        local items = {"Log", "Achievements", "About"}
         love.graphics.setColor(cfg.COL_UI_BG)
         love.graphics.rectangle("fill", dropdownX, dropdownY, dropdownW, itemH * #items)
         bevelBox(dropdownX, dropdownY, dropdownW, itemH * #items, false)

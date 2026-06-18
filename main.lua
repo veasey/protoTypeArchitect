@@ -5,8 +5,9 @@ local ui      = require("ui")
 local camera  = require("camera")
 local sprites = require("sprites")
 local postfx  = require("postfx")
-local logviewer = require("logviewer")
-local achievements = require("achievements")
+local logviewer = require("popups.logviewer")
+local achievements = require("popups.achievements")
+local about = require("popups.about")
 
 function love.load()
     love.window.setMode(cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT, {resizable = false})
@@ -37,16 +38,22 @@ function love.draw()
     ui.draw(game.getEfficiency(), #game.denizens)
     logviewer.draw()
     achievements.draw()
+    about.draw()
     achievements.drawNotifications()
     love.graphics.setScissor()
 end
 
 function love.mousepressed(x, y, button)
-    if logviewer.open and logviewer.isInside(x, y) then
+    if logviewer.open and logviewer:isInside(x, y) then
         logviewer.mousepressed(x, y, button)
         return
     end
-    if achievements.open and achievements.mousepressed(x, y, button) then
+    if achievements.open and achievements:isInside(x, y) then
+        achievements.mousepressed(x, y, button)
+        return
+    end
+    if about.open and about:isInside(x, y) then
+        about.mousepressed(x, y, button)
         return
     end
     ui.mousepressed(x, y, button)
@@ -59,6 +66,9 @@ function love.mousereleased(x, y, button)
     if achievements.open then
         achievements.mousereleased(x, y, button)
     end
+    if about.open then
+        about.mousereleased(x, y, button)
+    end
     ui.mousereleased(x, y, button)
 end
 
@@ -69,6 +79,9 @@ function love.mousemoved(x, y, dx, dy)
     if achievements.open then
         achievements.mousemoved(x, y, dx, dy)
     end
+    if about.open then
+        about.mousemoved(x, y, dx, dy)
+    end
     ui.mousemoved(x, y, dx, dy)
 end
 
@@ -77,5 +90,27 @@ function love.wheelmoved(x, y)
         logviewer.wheelmoved(x, y)
         return
     end
+    if about.open then
+        about.wheelmoved(x, y)
+        return
+    end
+    if achievements.open then
+        achievements.wheelmoved(x, y)
+        return
+    end
     ui.wheelmoved(x, y)
+end
+
+function love.keypressed(key)
+    if key == "p" or key == "pause" then
+        game.togglePauseState()
+    elseif key == "l" then
+        logviewer.open = not logviewer.open
+    elseif key == "a" then
+        achievements.open = not achievements.open
+    elseif key == "f5" then
+        game.save()
+    elseif key == "f6" then
+        game.load()
+    end
 end
