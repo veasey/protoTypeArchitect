@@ -3,3 +3,4 @@ art_insp/
 *.txt
 *.exe
 dist/
+*.zip

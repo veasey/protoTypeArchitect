@@ -42,9 +42,9 @@ config.TOOL_EXIT   = "exit"
 -- ============================================================
 --  RESOURCE COSTS
 -- ============================================================
-config.BUILD_COST_PER_TILE = 0.05
-config.ENTITY_COST         = 0.2
-config.REMOVE_REFUND       = 0.03
+config.BUILD_COST_PER_TILE = 0.025
+config.ENTITY_COST         = 0.5
+config.REMOVE_REFUND       = 0.025
 
 -- ============================================================
 --  STARTING ROOM

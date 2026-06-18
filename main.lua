@@ -8,12 +8,14 @@ local postfx  = require("postfx")
 local logviewer = require("popups.logviewer")
 local achievements = require("popups.achievements")
 local about = require("popups.about")
+local audio   = require("audio")
 
 function love.load()
     love.window.setMode(cfg.WINDOW_WIDTH, cfg.WINDOW_HEIGHT, {resizable = false})
     love.math.setRandomSeed(os.time())
     sprites.load()
     postfx.load()
+    audio.load()
     game.init()
 end
 
