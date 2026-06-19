@@ -88,6 +88,18 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         end
     end
 
+    -- Entity-induced anxiety (from all visible entities)
+    for _, ent in ipairs(entities) do
+        if ent.active then
+            local dist = util.distance(self.x, self.y, ent.x, ent.y)
+            if dist <= cfg.DENIZEN_SIGHT_RANGE and util.hasLineOfSight(mapObj, self.x, self.y, ent.x, ent.y) then
+                -- anxiety increase based on entity's despair per second (a measure of scariness)
+                local scareFactor = ent.despairPerSec * 2.0   -- tune this multiplier
+                self.profile.anxiety = self.profile.anxiety + scareFactor * dt
+            end
+        end
+    end
+
     local effectiveSpeed = self.profile.speed * (1 + (unease or 0) * cfg.UNEASE_SPEED_BOOST)
 
     -- Despair peak outcomes
