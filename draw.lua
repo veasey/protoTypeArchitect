@@ -107,8 +107,12 @@ function draw.world()
         local ty = (hover.y-1)*cfg.TILE_SIZE
         local valid = false
         local tool = ui.getActiveTool()
-        if tool == cfg.TOOL_LAMP or tool == cfg.TOOL_ENTITY or tool == cfg.TOOL_FOOD or tool == cfg.TOOL_EXIT then
-            valid = map.isWalkable(hover.x, hover.y)
+        if tool == cfg.TOOL_LAMP then
+            valid = map.isWalkable(hover.x, hover.y) and game.familiarityResource >= cfg.LAMP_COST
+        elseif tool == cfg.TOOL_ENTITY then
+            valid = map.isWalkable(hover.x, hover.y) and game.uneaseResource >= cfg.ENTITY_COST
+        elseif tool == cfg.TOOL_FOOD then
+            valid = map.isWalkable(hover.x, hover.y) and game.familiarityResource >= cfg.FOOD_COST
         elseif tool == cfg.TOOL_BUILD then
             valid = map.isBuildable(hover.x, hover.y) and game.familiarityResource >= cfg.BUILD_COST_PER_TILE
         elseif tool == cfg.TOOL_REMOVE then

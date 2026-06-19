@@ -17,7 +17,7 @@ config.WINDOW_HEIGHT   = 800
 -- ============================================================
 config.MENUBAR_HEIGHT  = 36
 config.TOOL_PANEL_WIDTH = 240
-config.STATUSBAR_HEIGHT = 28
+config.STATUSBAR_HEIGHT = 40
 
 config.GAME_WIDTH      = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
 config.GAME_HEIGHT     = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT - config.MENUBAR_HEIGHT
@@ -43,7 +43,10 @@ config.TOOL_EXIT   = "exit"
 --  RESOURCE COSTS
 -- ============================================================
 config.BUILD_COST_PER_TILE = 0.025
+config.LAMP_COST           = 0.1    -- Familiarity spent per lamp
+config.FOOD_COST           = 0.08   -- Familiarity spent per food item
 config.ENTITY_COST         = 0.5
+config.EXIT_COST           = 0.1
 config.REMOVE_REFUND       = 0.025
 
 -- ============================================================

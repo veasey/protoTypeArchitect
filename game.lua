@@ -307,6 +307,15 @@ function game.update(dt)
         game.perfectEquilibriumTimer = 0
     end
 
+    -- Spendable resources increase toward global averages, but never drop
+    local rechargeRate = 0.025 * dt   -- 5% of the bar per second
+    if game.familiarityResource < game.familiarity then
+        game.familiarityResource = math.min(game.familiarity, game.familiarityResource + rechargeRate)
+    end
+    if game.uneaseResource < game.unease then
+        game.uneaseResource = math.min(game.unease, game.uneaseResource + rechargeRate)
+    end
+
     -- Dread entity spawning
     game.dreadSpawnTimer = game.dreadSpawnTimer + dt
     if game.dreadSpawnTimer >= cfg.DREAD_SPAWN_INTERVAL then
