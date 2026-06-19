@@ -72,7 +72,7 @@ config.DENIZEN_SIGHT_RANGE     = 300
 config.AVOID_DESPAIR_THRESHOLD = 0.5
 config.AVOID_LOOK_AHEAD        = 1.0
 config.AVOID_STRENGTH          = 2.0
-config.FEAR_DURATION           = 5
+config.FEAR_DURATION           = 8
 
 -- ============================================================
 --  DESPAIR & COMFORT
@@ -80,9 +80,9 @@ config.FEAR_DURATION           = 5
 config.BASE_DESPAIR_RATE   = 0.01
 config.COMFORT_CLOSE       = 80
 config.COMFORT_FAR         = 150
-config.CLOSE_COMFORT_DELTA = -0.02
-config.FAR_COMFORT_DELTA   = -0.005
-config.DESPAIR_MIN         = 0.01
+config.CLOSE_COMFORT_DELTA = -0.01 -- was -0.02
+config.FAR_COMFORT_DELTA   = 0.0   -- was -0.005
+config.DESPAIR_MIN         = 0.0   -- never remove from low despair alone
 config.DESPAIR_MAX         = 0.99
 config.SWEET_SPOT_LOW      = 0.3
 config.SWEET_SPOT_HIGH     = 0.7
