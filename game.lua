@@ -283,7 +283,13 @@ function game.update(dt)
             totalFamiliarityScore = totalFamiliarityScore + score
             totalAnxiety = totalAnxiety + den.profile.anxiety
             totalDespair = totalDespair + den.profile.despair
+
+            if den.bondFormed then
+                game.familiarity = math.min(1, game.familiarity + cfg.BOND_FAMILIARITY_BOOST)
+                den.bondFormed = nil   -- only apply once per bond
+            end
         end
+    
         local targetFamiliarity = math.max(0, math.min(1, totalFamiliarityScore / denCount))
         local targetUnease = math.max(0, math.min(1, totalAnxiety / denCount))
         local targetDread = math.max(0, math.min(1, totalDespair / denCount))

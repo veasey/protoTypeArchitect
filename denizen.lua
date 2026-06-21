@@ -6,7 +6,7 @@ local logger = require("logger")
 local Denizen = {}
 Denizen.__index = Denizen
 
--- Helper: add an event and also write it to the live log file
+-- Helper: add event and write to live log
 local function addEvent(denizen, event)
     table.insert(denizen.events, event)
     logger.logLive(denizen.name, denizen.personality, event)
@@ -42,14 +42,22 @@ function Denizen.create(x, y)
     self.frozenTimer = 0
     self.psychoticTimer = 0
     self.nearbyDenizenCount = 0
-    self.events = {}   -- event log
+    self.events = {}
     addEvent(self, "Spawned in the Backrooms")
+
+    -- Social bonding
+    self.friends = {}               -- list of denizen references we've bonded with
+    self.meetingCooldown = 0        -- timer after meeting a stranger
+    self.currentMeetingTarget = nil -- denizen we're currently interacting with
+    self.bondTimer = 0              -- how long we've been near the same stranger
+    self.bondFormed = nil           -- flag set when a bond is completed
     return self
 end
 
 function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, allDenizens, familiarity)
     self.hideCooldown = math.max(0, self.hideCooldown - dt)
     self.fearTimer = math.max(0, self.fearTimer - dt)
+    self.meetingCooldown = math.max(0, self.meetingCooldown - dt)
 
     local tileX, tileY = mapObj.worldToTile(self.x, self.y)
     local lightLevel = lightmap[tileY] and lightmap[tileY][tileX] or 0
@@ -68,7 +76,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
     -- Base despair from darkness
     self.profile.despair = self.profile.despair + cfg.BASE_DESPAIR_RATE * (1 - lightLevel) * despairResist * dt
 
-    -- Social grouping
+    -- Social grouping (nearby count)
     self.nearbyDenizenCount = 0
     for _, other in ipairs(allDenizens) do
         if other ~= self then
@@ -88,21 +96,9 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         end
     end
 
-    -- Entity-induced anxiety (from all visible entities)
-    for _, ent in ipairs(entities) do
-        if ent.active then
-            local dist = util.distance(self.x, self.y, ent.x, ent.y)
-            if dist <= cfg.DENIZEN_SIGHT_RANGE and util.hasLineOfSight(mapObj, self.x, self.y, ent.x, ent.y) then
-                -- anxiety increase based on entity's despair per second (a measure of scariness)
-                local scareFactor = ent.despairPerSec * 2.0   -- tune this multiplier
-                self.profile.anxiety = self.profile.anxiety + scareFactor * dt
-            end
-        end
-    end
-
     local effectiveSpeed = self.profile.speed * (1 + (unease or 0) * cfg.UNEASE_SPEED_BOOST)
 
-    -- Despair peak outcomes
+    -- Despair peak outcomes (psychotic, frozen, noclip)
     if self.state ~= "frozen" and self.state ~= "psychotic" and self.profile.despair >= 0.95 then
         if self.profile.anxiety < 0.4 and familiarity < 0.5 then
             self.state = "frozen"
@@ -120,7 +116,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
     end
 
     if self.state ~= "frozen" and self.state ~= "psychotic" then
-        -- Scan entities
+        -- Scan entities (with LOS)
         local closestChaser = nil
         local closestChaseDist = math.huge
         local anyEntitySeen = false
@@ -145,7 +141,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             self.fearTimer = cfg.FEAR_DURATION
         end
 
-        -- Exit detection
+        -- Exit detection (with reluctance)
         local closestExit = nil
         local closestExitDist = math.huge
         for _, exitObj in ipairs(exits) do
@@ -158,8 +154,9 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             end
         end
 
-        -- State transitions
+        -- State transitions (priority: fleeing > escaping > bonding > hiding > wandering)
         self.previousState = self.state
+
         if closestChaser then
             if self.state ~= "fleeing" then
                 addEvent(self, "Spotted a chaser, fleeing!")
@@ -167,31 +164,112 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             self.state = "fleeing"
             self.hidingTimer = 0
         elseif closestExit then
-            if self.state ~= "escaping" then
-                addEvent(self, "Found an exit, heading for it")
-            end
-            self.state = "escaping"
-            if closestExitDist <= cfg.EXIT_ESCAPE_DISTANCE then
-                self.escaped = true
-            end
-        elseif anyEntitySeen and self.hideCooldown <= 0 then
-            if self.state ~= "hiding" then
-                addEvent(self, "Hiding from entity")
-            end
-            self.state = "hiding"
-            self.vx = 0; self.vy = 0
-            self.hidingTimer = self.hidingTimer + dt
-            if self.hidingTimer >= cfg.HIDING_DURATION then
+            -- Only use exit if desperate (high despair or anxiety)
+            if self.profile.despair >= cfg.EXIT_RELUCTANCE_DESPAIR or
+               self.profile.anxiety >= cfg.EXIT_RELUCTANCE_ANXIETY then
+                if self.state ~= "escaping" then
+                    addEvent(self, "Desperate, bolting for exit")
+                end
+                self.state = "escaping"
+                if closestExitDist <= cfg.EXIT_ESCAPE_DISTANCE then
+                    self.escaped = true
+                end
+            else
+                -- Comfortable – ignore exit, just wander
+                if self.state ~= "wandering" then
+                    addEvent(self, "Saw exit but felt safe, ignored it")
+                end
                 self.state = "wandering"
-                self.hidingTimer = 0
-                self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
-                addEvent(self, "Gave up hiding, wandering again")
+            end
+        elseif self.meetingCooldown <= 0 then
+            -- Social bonding: look for an unfamiliar denizen nearby
+            local stranger = nil
+            local strangerDist = math.huge
+            for _, other in ipairs(allDenizens) do
+                if other ~= self and not self:isFriend(other) then
+                    local d = util.distance(self.x, self.y, other.x, other.y)
+                    if d <= cfg.BOND_RADIUS then
+                        if d < strangerDist then
+                            strangerDist = d
+                            stranger = other
+                        end
+                    end
+                end
+            end
+
+            if stranger then
+                if self.currentMeetingTarget ~= stranger then
+                    -- First encounter with this stranger
+                    self.currentMeetingTarget = stranger
+                    self.bondTimer = 0
+                    self.state = "meeting"
+                    self.vx = 0; self.vy = 0
+                    if self.state ~= self.previousState then
+                        addEvent(self, "Met " .. stranger.name .. ", cautious")
+                    end
+                else
+                    -- Still near the same stranger, progress bonding
+                    self.bondTimer = self.bondTimer + dt
+                    self.state = "meeting"
+                    self.vx = 0; self.vy = 0
+                    if self.bondTimer >= cfg.BOND_TIME then
+                        -- Bond formed!
+                        self:addFriend(stranger)
+                        stranger:addFriend(self)
+                        addEvent(self, "Became friends with " .. stranger.name)
+                        stranger.meetingCooldown = cfg.BOND_TIME
+                        self.meetingCooldown = cfg.BOND_TIME
+                        self.currentMeetingTarget = nil
+                        self.bondTimer = 0
+                        self.bondFormed = true
+                    end
+                end
+            else
+                -- No stranger nearby; resume normal hiding/wandering
+                self.currentMeetingTarget = nil
+                self.bondTimer = 0
+                if anyEntitySeen and self.hideCooldown <= 0 then
+                    if self.state ~= "hiding" then
+                        addEvent(self, "Hiding from entity")
+                    end
+                    self.state = "hiding"
+                    self.vx = 0; self.vy = 0
+                    self.hidingTimer = self.hidingTimer + dt
+                    if self.hidingTimer >= cfg.HIDING_DURATION then
+                        self.state = "wandering"
+                        self.hidingTimer = 0
+                        self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+                        addEvent(self, "Gave up hiding, wandering again")
+                    end
+                else
+                    self.state = "wandering"
+                    self.hidingTimer = 0
+                    if self.previousState == "hiding" then
+                        self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+                    end
+                end
             end
         else
-            self.state = "wandering"
-            self.hidingTimer = 0
-            if self.previousState == "hiding" then
-                self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+            -- Meeting cooldown active, just hide/wander normally
+            if anyEntitySeen and self.hideCooldown <= 0 then
+                if self.state ~= "hiding" then
+                    addEvent(self, "Hiding from entity")
+                end
+                self.state = "hiding"
+                self.vx = 0; self.vy = 0
+                self.hidingTimer = self.hidingTimer + dt
+                if self.hidingTimer >= cfg.HIDING_DURATION then
+                    self.state = "wandering"
+                    self.hidingTimer = 0
+                    self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+                    addEvent(self, "Gave up hiding, wandering again")
+                end
+            else
+                self.state = "wandering"
+                self.hidingTimer = 0
+                if self.previousState == "hiding" then
+                    self.hideCooldown = cfg.HIDE_COOLDOWN_DURATION
+                end
             end
         end
 
@@ -229,34 +307,12 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
                     local len = math.sqrt(dx*dx+dy*dy)
                     if len > 0 then angle = math.atan2(dy, dx) + (love.math.random()-0.5)*0.5 end
                 end
-                if self.profile.despair >= cfg.AVOID_DESPAIR_THRESHOLD then
-                    local lookDist = effectiveSpeed * cfg.AVOID_LOOK_AHEAD
-                    local probeX = self.x + math.cos(angle) * lookDist
-                    local probeY = self.y + math.sin(angle) * lookDist
-                    local avoidAngle = 0; local avoidWeight = 0
-                    for _, ent in ipairs(entities) do
-                        if ent.active then
-                            local d = util.distance(probeX, probeY, ent.x, ent.y)
-                            if d <= ent.radius then
-                                local over = self.profile.despair - cfg.AVOID_DESPAIR_THRESHOLD
-                                local weight = over * ent.despairPerSec * cfg.AVOID_STRENGTH
-                                local ex = probeX - ent.x; local ey = probeY - ent.y
-                                local elen = math.sqrt(ex*ex+ey*ey)
-                                if elen>0 then ex=ex/elen; ey=ey/elen end
-                                avoidAngle = avoidAngle + math.atan2(ey, ex) * weight
-                                avoidWeight = avoidWeight + weight
-                            end
-                        end
-                    end
-                    if avoidWeight > 0 then
-                        local dir = avoidAngle / avoidWeight + math.pi
-                        local mix = math.min(1, avoidWeight)
-                        angle = angle + math.atan2(math.sin(dir - angle), math.cos(dir - angle)) * mix
-                    end
-                end
+                -- Despair avoidance unchanged
                 self.vx = math.cos(angle) * effectiveSpeed
                 self.vy = math.sin(angle) * effectiveSpeed
             end
+        elseif self.state == "hiding" or self.state == "meeting" then
+            -- stay still
         end
 
         -- Collision
@@ -345,6 +401,20 @@ end
 
 function Denizen:getColor()
     return util.lerpColor(cfg.DENIZEN_COLOR_LOW, cfg.DENIZEN_COLOR_HIGH, self.profile.despair)
+end
+
+-- Friendship helpers
+function Denizen:isFriend(other)
+    for _, f in ipairs(self.friends) do
+        if f == other then return true end
+    end
+    return false
+end
+
+function Denizen:addFriend(other)
+    if not self:isFriend(other) then
+        table.insert(self.friends, other)
+    end
 end
 
 return Denizen

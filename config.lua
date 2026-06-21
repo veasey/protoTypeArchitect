@@ -74,6 +74,16 @@ config.AVOID_LOOK_AHEAD        = 1.0
 config.AVOID_STRENGTH          = 2.0
 config.FEAR_DURATION           = 8
 
+-- Exit reluctance
+config.EXIT_RELUCTANCE_DESPAIR = 0.6   -- only use exit if despair >= this
+config.EXIT_RELUCTANCE_ANXIETY = 0.7   -- or anxiety >= this
+
+-- Social bonding
+config.BOND_RADIUS = 80                 -- range to start bonding
+config.BOND_TIME = 3.0                  -- seconds of continuous proximity to bond
+config.BOND_FAMILIARITY_BOOST = 0.05   -- added to global Familiarity per bond
+config.MEETING_CAUTION_TIME = 1.0       -- seconds they freeze when first seeing a stranger
+
 -- ============================================================
 --  DESPAIR & COMFORT
 -- ============================================================
