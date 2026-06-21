@@ -1,11 +1,11 @@
 -- postfx.lua
--- Applies CRT/VHS effects to the final render with safe fallback.
+-- CRT/VHS effect with safe uniform checking and fallback.
 
 local postfx = {}
 local shader
 local canvas
 local noiseTex
-local enabled = true   -- becomes false if shader fails
+local enabled = true
 
 function postfx.load()
     local w, h = love.graphics.getDimensions()
@@ -23,7 +23,7 @@ function postfx.load()
     noiseTex:setWrap("repeat", "repeat")
     noiseTex:setFilter("linear", "linear")
 
-    -- GLSL shader (same as before)
+    -- Shader code
     local pixelcode = [[
         extern number time;
         extern vec2 resolution;
@@ -36,26 +36,21 @@ function postfx.load()
         vec4 effect(vec4 color, Image texture, vec2 texcoord, vec2 screen_coord) {
             vec2 uv = texcoord;
 
-            // Chromatic aberration
             float chromaStrength = 0.002;
             float r = Texel(texture, uv + vec2(chromaStrength, 0.0)).r;
             float g = Texel(texture, uv).g;
             float b = Texel(texture, uv - vec2(chromaStrength, 0.0)).b;
             vec3 col = vec3(r, g, b);
 
-            // Scanlines
             float scanline = sin(uv.y * resolution.y * 1.5) * 0.05 + 0.95;
             col *= scanline;
 
-            // Vignette
             float vignette = smoothstep(0.8, 0.2, length(uv - 0.5) * 1.5);
             col *= mix(0.3, 1.0, vignette);
 
-            // Noise
             float noiseVal = Texel(noise, uv * 5.0 + fract(time * 0.1)).r;
             col += (noiseVal - 0.5) * 0.08;
 
-            // Occasional glitch
             float glitch = 0.0;
             if (hash(vec2(floor(uv.y * 20.0), floor(time * 2.0))) < 0.1) {
                 glitch = (hash(vec2(uv.y, time)) - 0.5) * 0.03;
@@ -72,10 +67,15 @@ function postfx.load()
         }
     ]]
 
-    -- Try to compile the shader; if it fails, disable CRT
+    -- Try to create the shader; if it fails, disable CRT completely
     local ok, result = pcall(love.graphics.newShader, pixelcode)
     if ok then
         shader = result
+        -- Quick test: if any of the required uniforms are missing, disable the effect
+        if not shader:hasUniform("time") or not shader:hasUniform("resolution") or not shader:hasUniform("noise") then
+            enabled = false
+            print("CRT shader missing uniforms – disabling post‑fx.")
+        end
     else
         enabled = false
         print("CRT shader failed to compile – disabling post‑fx. Error: " .. tostring(result))
@@ -93,16 +93,23 @@ end
 
 function postfx.apply(dt)
     if not enabled then
-        -- Simply draw the captured canvas without any effect
         love.graphics.setColor(1, 1, 1)
         love.graphics.draw(canvas)
         return
     end
 
+    -- Only send uniforms that exist (extra safety)
+    if shader:hasUniform("time") then
+        shader:send("time", love.timer.getTime())
+    end
     local w, h = love.graphics.getDimensions()
-    shader:send("time", love.timer.getTime())
-    shader:send("resolution", {w, h})
-    shader:send("noise", noiseTex)
+    if shader:hasUniform("resolution") then
+        shader:send("resolution", {w, h})
+    end
+    if shader:hasUniform("noise") then
+        shader:send("noise", noiseTex)
+    end
+
     love.graphics.setShader(shader)
     love.graphics.setColor(1, 1, 1)
     love.graphics.draw(canvas)
