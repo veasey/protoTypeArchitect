@@ -1,21 +1,17 @@
 -- postfx.lua
--- Applies CRT/VHS effects to the final render.
+-- Applies CRT/VHS effects to the final render with safe fallback.
 
 local postfx = {}
-
 local shader
 local canvas
 local noiseTex
-local glitchTimer = 0
-local glitchActive = true
-local glitchStrength = 0
+local enabled = true   -- becomes false if shader fails
 
 function postfx.load()
-    -- Create a canvas matching the window
     local w, h = love.graphics.getDimensions()
     canvas = love.graphics.newCanvas(w, h)
 
-    -- Generate a small noise texture
+    -- Generate noise texture
     local noiseData = love.image.newImageData(128, 128)
     for y = 0, 127 do
         for x = 0, 127 do
@@ -27,13 +23,12 @@ function postfx.load()
     noiseTex:setWrap("repeat", "repeat")
     noiseTex:setFilter("linear", "linear")
 
-    -- The GLSL fragment shader
+    -- GLSL shader (same as before)
     local pixelcode = [[
         extern number time;
         extern vec2 resolution;
         extern Image noise;
 
-        // Pseudo-random hash
         float hash(vec2 p) {
             return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
         }
@@ -52,15 +47,15 @@ function postfx.load()
             float scanline = sin(uv.y * resolution.y * 1.5) * 0.05 + 0.95;
             col *= scanline;
 
-            // Vignette (dark border)
+            // Vignette
             float vignette = smoothstep(0.8, 0.2, length(uv - 0.5) * 1.5);
             col *= mix(0.3, 1.0, vignette);
 
-            // Noise from texture
+            // Noise
             float noiseVal = Texel(noise, uv * 5.0 + fract(time * 0.1)).r;
             col += (noiseVal - 0.5) * 0.08;
 
-            // Occasional glitch: random horizontal displacement
+            // Occasional glitch
             float glitch = 0.0;
             if (hash(vec2(floor(uv.y * 20.0), floor(time * 2.0))) < 0.1) {
                 glitch = (hash(vec2(uv.y, time)) - 0.5) * 0.03;
@@ -71,15 +66,20 @@ function postfx.load()
                 Texel(texture, uv - vec2(glitch, 0.0)).b
             );
 
-            // Slight colour bleeding
             col = mix(col, vec3(col.r, col.g * 0.9, col.b * 0.8), 0.1);
 
             return vec4(col, 1.0) * color;
         }
     ]]
 
-    shader = love.graphics.newShader(pixelcode)
-    shader:send("noise", noiseTex)
+    -- Try to compile the shader; if it fails, disable CRT
+    local ok, result = pcall(love.graphics.newShader, pixelcode)
+    if ok then
+        shader = result
+    else
+        enabled = false
+        print("CRT shader failed to compile – disabling post‑fx. Error: " .. tostring(result))
+    end
 end
 
 function postfx.beginCapture()
@@ -92,9 +92,17 @@ function postfx.endCapture()
 end
 
 function postfx.apply(dt)
+    if not enabled then
+        -- Simply draw the captured canvas without any effect
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(canvas)
+        return
+    end
+
     local w, h = love.graphics.getDimensions()
     shader:send("time", love.timer.getTime())
     shader:send("resolution", {w, h})
+    shader:send("noise", noiseTex)
     love.graphics.setShader(shader)
     love.graphics.setColor(1, 1, 1)
     love.graphics.draw(canvas)
