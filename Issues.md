@@ -8,4 +8,3 @@
 ### 💡 Cool Ideas
 
 - config is generated, slight variations to avoid minmaxxing.
-

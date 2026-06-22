@@ -23,6 +23,14 @@ config.GAME_WIDTH      = config.WINDOW_WIDTH - config.TOOL_PANEL_WIDTH
 config.GAME_HEIGHT     = config.WINDOW_HEIGHT - config.STATUSBAR_HEIGHT - config.MENUBAR_HEIGHT
 
 -- ============================================================
+--  UI CAMERA
+-- ============================================================
+
+config.CAM_PAN_SPEED = 400       -- pixels per second for keyboard
+config.EDGE_SCROLL_SPEED = 300   -- pixels per second for edge scrolling
+config.EDGE_ZONE = 30            -- pixels from the border that trigger scrolling
+
+-- ============================================================
 --  TILE TYPES
 -- ============================================================
 config.VOID   = 0

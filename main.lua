@@ -24,6 +24,10 @@ function love.update(dt)
     local mx, my = love.mouse.getPosition()
     game.hoveredObject = game.getHoveredObject(mx, my, camera)
     achievements.update(dt)
+
+     -- RTS camera panning
+    local popupOpen = logviewer.open or achievements.open or about.open
+    camera.update(dt, mx, my, popupOpen)
 end
 
 function love.draw()
@@ -108,8 +112,10 @@ function love.keypressed(key)
         game.togglePauseState()
     elseif key == "l" then
         logviewer.open = not logviewer.open
-    elseif key == "a" then
+    elseif key == "m" then
         achievements.open = not achievements.open
+    elseif key == "h" then
+        about.open = not about.open
     elseif key == "f5" then
         game.save()
     elseif key == "f6" then

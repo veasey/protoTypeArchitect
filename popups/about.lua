@@ -34,7 +34,7 @@ function about.draw()
         "Hotkeys:",
         "P / PAUSE   - Pause / Resume",
         "L           - Open Log Viewer",
-        "A           - Open Achievements",
+        "M           - Open Achievements",
         "F5          - Save game",
         "F6          - Load game",
         " ",

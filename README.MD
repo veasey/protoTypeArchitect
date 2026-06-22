@@ -4,7 +4,15 @@ PROTOTYPE: ARCHITECT
 A very simple prototype for a concept running on the LOVE engine for a game about managing a liminal labyrinth.
 As denizens find themselves within the corridors, balance their psychological state to an optimum (between comfort and despair) using light sources and lovecraftian entities.
 
-Press `p` to PAUSE.
+### Controls
+
+WSDA        = Move Camera
+P / PAUSE   = Pause / Resume
+H           = Help / About
+L           = View Log
+M           = View Achievements
+F5          = Quick Save
+F6          = Quick Load
 
 ## Credits and Thanks
 
