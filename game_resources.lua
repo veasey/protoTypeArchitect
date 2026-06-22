@@ -2,6 +2,8 @@
 local map = require("map")
 local util = require("util")
 local cfg = require("config")
+local camera = require("camera")
+local effects = require("effects")
 
 local resources = {}
 
@@ -20,8 +22,13 @@ function resources.compute(game, dt)
             totalAnxiety = totalAnxiety + den.profile.anxiety
             totalDespair = totalDespair + den.profile.despair
 
-            if den.bondFormed then
+            if den.bondFormed then    
                 game.familiarity = math.min(1, game.familiarity + cfg.BOND_FAMILIARITY_BOOST)
+                -- Resource‑drop shard
+                local screenX = (den.x - camera.x) * camera.zoom + cfg.GAME_WIDTH / 2
+                local screenY = (den.y - camera.y) * camera.zoom + cfg.WINDOW_HEIGHT / 2
+                local targetX, targetY = getFamiliarityBarCenter()
+                effects.addResourceDrop(screenX, screenY, targetX, targetY, {0.6, 0.8, 0.2})
                 den.bondFormed = nil
             end
         end

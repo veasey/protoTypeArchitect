@@ -167,4 +167,14 @@ function util.tableShow(t, name, indent)
     return str
 end
 
+-- Helper to get the centre of the Familiarity bar on screen
+function getFamiliarityBarCenter()
+    local cfg = require("config")
+    local barW = (cfg.WINDOW_WIDTH - 30) / 3
+    local barX = 10
+    local barY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT + 4
+    local barH = cfg.STATUSBAR_HEIGHT - 20
+    return barX + barW / 2, barY + barH / 2
+end
+
 return util

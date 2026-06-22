@@ -1,10 +1,15 @@
 -- effects.lua
--- Manages visual fade-in/fade-out animations for tiles and objects.
+-- Manages visual fade-in/fade-out animations for tiles and objects,
+-- plus death particles and resource drops.
 
 local effects = {}
 effects.list = {}
+effects.particles = {}
+effects.resourceDrops = {}
 
--- Tile fade-in (new floor tile appears)
+-- ============================================================
+--  TILE / OBJECT FADES (unchanged)
+-- ============================================================
 function effects.addTileFadeIn(tileX, tileY, delay, duration)
     duration = duration or 0.4
     delay = delay or 0
@@ -21,7 +26,6 @@ function effects.addTileFadeIn(tileX, tileY, delay, duration)
     })
 end
 
--- Returns true if there is an active tile_fade_in for these coordinates
 function effects.isTileFadingIn(tileX, tileY)
     for _, e in ipairs(effects.list) do
         if e.type == "tile_fade_in" and e.tileX == tileX and e.tileY == tileY then
@@ -31,7 +35,6 @@ function effects.isTileFadingIn(tileX, tileY)
     return false
 end
 
--- Tile fade-out (floor tile becomes void) – unchanged except optional lightLevel
 function effects.addTileFadeOut(tileX, tileY, lightLevel, delay, duration)
     duration = duration or 0.4
     delay = delay or 0
@@ -50,7 +53,6 @@ function effects.addTileFadeOut(tileX, tileY, lightLevel, delay, duration)
     })
 end
 
--- Object fade-out (lamps, entities, denizens)
 function effects.addObjectFade(objType, x, y, scaleX, scaleY, duration)
     duration = duration or 0.3
     table.insert(effects.list, {
@@ -64,6 +66,7 @@ function effects.addObjectFade(objType, x, y, scaleX, scaleY, duration)
 end
 
 function effects.update(dt)
+    -- existing tile/object fades
     for i = #effects.list, 1, -1 do
         local e = effects.list[i]
         e.elapsed = e.elapsed + dt
@@ -77,6 +80,83 @@ function effects.update(dt)
             table.remove(effects.list, i)
         end
     end
+
+    -- particle bursts (death)
+    effects.updateParticles(dt)
+    -- resource drops (bonds/escapes)
+    effects.updateResourceDrops(dt)
+end
+
+-- ============================================================
+--  DEATH PARTICLES
+-- ============================================================
+function effects.addParticleBurst(x, y, count)
+    count = count or 10
+    for i = 1, count do
+        local angle = love.math.random() * math.pi * 2
+        local speed = love.math.random(30, 80)
+        local vx = math.cos(angle) * speed
+        local vy = math.sin(angle) * speed
+        table.insert(effects.particles, {
+            x = x, y = y,
+            vx = vx, vy = vy,
+            life = 0.4 + love.math.random() * 0.3,
+            maxLife = 0.4 + love.math.random() * 0.3,
+            color = love.math.random() < 0.5 and {1,1,1} or {0,0,0},
+        })
+    end
+end
+
+function effects.updateParticles(dt)
+    for i = #effects.particles, 1, -1 do
+        local p = effects.particles[i]
+        p.x = p.x + p.vx * dt
+        p.y = p.y + p.vy * dt
+        p.life = p.life - dt
+        if p.life <= 0 then
+            table.remove(effects.particles, i)
+        end
+    end
+end
+
+-- ============================================================
+--  RESOURCE DROPS (shards flying to Familiarity bar)
+-- ============================================================
+function effects.addResourceDrop(screenX, screenY, targetX, targetY, color)
+    table.insert(effects.resourceDrops, {
+        x = screenX, y = screenY,
+        startX = screenX, startY = screenY,
+        targetX = targetX, targetY = targetY,
+        color = color,
+        life = 0.6,
+        maxLife = 0.6,
+    })
+end
+
+function effects.updateResourceDrops(dt)
+    for i = #effects.resourceDrops, 1, -1 do
+        local d = effects.resourceDrops[i]
+        d.life = d.life - dt
+        if d.life <= 0 then
+            table.remove(effects.resourceDrops, i)
+        else
+            local t = 1 - (d.life / d.maxLife)
+            d.x = d.startX + (d.targetX - d.startX) * t
+            d.y = d.startY + (d.targetY - d.startY) * t
+        end
+    end
+end
+
+function effects.addResourceDrop(screenX, screenY, targetX, targetY, color)
+    table.insert(effects.resourceDrops, {
+        x = screenX, y = screenY,
+        startX = screenX, startY = screenY,
+        targetX = targetX, targetY = targetY,
+        color = color,
+        life = 0.6,
+        maxLife = 0.6,
+        phase = love.math.random() * math.pi * 2,   -- random pulse phase
+    })
 end
 
 return effects

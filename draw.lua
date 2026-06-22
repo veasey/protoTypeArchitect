@@ -181,6 +181,15 @@ function draw.world()
     end
 
     camera.popTransform()
+
+    -- Resource‑drop shards (screen space, subtle pulsing circles)
+    for _, d in ipairs(effects.resourceDrops) do
+        local alpha = d.life / d.maxLife
+        local pulse = 1 + 0.3 * math.sin((1 - alpha) * 10 + d.phase)   -- gentle wobble
+        local radius = 2 * pulse
+        love.graphics.setColor(d.color[1], d.color[2], d.color[3], alpha * 0.7)
+        love.graphics.circle("fill", d.x, d.y, radius)
+    end
 end
 
 return draw

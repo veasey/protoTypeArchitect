@@ -6,6 +6,8 @@ local audio = require("audio")
 local util = require("util")
 local cfg = require("config")
 local logger = require("logger")
+local camera = require("camera")
+local effects = require("effects")
 
 local update = {}
 
@@ -46,6 +48,13 @@ function update.run(game, dt)
             game.escapedCount = game.escapedCount + 1
             game.familiarity = math.min(1, game.familiarity + cfg.EXIT_FAMILIARITY_BOOST)
             effects.addParticleBurst(den.x, den.y, 15)
+
+            -- Resource‑drop effect
+            local screenX = (den.x - camera.x) * camera.zoom + cfg.GAME_WIDTH / 2
+            local screenY = (den.y - camera.y) * camera.zoom + cfg.WINDOW_HEIGHT / 2
+            local targetX, targetY = getFamiliarityBarCenter()
+            effects.addResourceDrop(screenX, screenY, targetX, targetY, {0.2, 0.8, 0.2})
+
             removeDenizen(game, i, "escaped")
             audio.playDenizenEnterLeaveSound()
         end
