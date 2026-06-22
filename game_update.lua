@@ -142,6 +142,28 @@ function update.run(game, dt)
         end
     end
 
+    -- ============================================================
+    --  RESOURCE DROPS (subtle pulsing particles toward status bars)
+    -- ============================================================
+    for _, den in ipairs(game.denizens) do
+        local screenX = (den.x - camera.x) * camera.zoom + cfg.GAME_WIDTH / 2
+        local screenY = (den.y - camera.y) * camera.zoom + cfg.WINDOW_HEIGHT / 2
+
+        -- Unease drop when a denizen starts hiding (sees an entity)
+        if den.justStartedHiding then
+            local targetX, targetY = util.getUneaseBarCenter()
+            effects.addResourceDrop(screenX, screenY, targetX, targetY, {0.8, 0.8, 0.2})
+            den.justStartedHiding = nil
+        end
+
+        -- Dread drop when a denizen flees, freezes, or goes psychotic
+        if den.justGotScared then
+            local targetX, targetY = util.getDreadBarCenter()
+            effects.addResourceDrop(screenX, screenY, targetX, targetY, {0.8, 0.2, 0.2})
+            den.justGotScared = nil
+        end
+    end
+
     game.computeLighting()
     effects.update(dt)
 

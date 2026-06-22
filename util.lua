@@ -177,4 +177,22 @@ function getFamiliarityBarCenter()
     return barX + barW / 2, barY + barH / 2
 end
 
+function util.getUneaseBarCenter()
+    local cfg = require("config")
+    local barW = (cfg.WINDOW_WIDTH - 30) / 3
+    local barX = 10 + barW + 5
+    local barY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT + 4
+    local barH = cfg.STATUSBAR_HEIGHT - 20
+    return barX + barW / 2, barY + barH / 2
+end
+
+function util.getDreadBarCenter()
+    local cfg = require("config")
+    local barW = (cfg.WINDOW_WIDTH - 30) / 3
+    local barX = 10 + (barW + 5) * 2
+    local barY = cfg.WINDOW_HEIGHT - cfg.STATUSBAR_HEIGHT + 4
+    local barH = cfg.STATUSBAR_HEIGHT - 20
+    return barX + barW / 2, barY + barH / 2
+end
+
 return util

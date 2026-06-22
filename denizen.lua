@@ -51,6 +51,10 @@ function Denizen.create(x, y)
     self.currentMeetingTarget = nil -- denizen we're currently interacting with
     self.bondTimer = 0              -- how long we've been near the same stranger
     self.bondFormed = nil           -- flag set when a bond is completed
+
+    -- Resource drop flags
+    self.justStartedHiding = nil
+    self.justGotScared = nil
     return self
 end
 
@@ -105,10 +109,12 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             self.vx = 0; self.vy = 0
             self.frozenTimer = 0
             addEvent(self, "Gave up hope, frozen in despair")
+            self.justGotScared = true   -- dread drop
         elseif self.profile.anxiety >= 0.6 then
             self.state = "psychotic"
             self.psychoticTimer = 0
             addEvent(self, "Anxiety snapped, became psychotic")
+            self.justGotScared = true   -- dread drop
         elseif familiarity > 0.6 then
             self.toRemove = true
             addEvent(self, "Noclipped out (high familiarity)")
@@ -160,6 +166,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
         if closestChaser then
             if self.state ~= "fleeing" then
                 addEvent(self, "Spotted a chaser, fleeing!")
+                self.justGotScared = true   -- dread drop
             end
             self.state = "fleeing"
             self.hidingTimer = 0
@@ -231,6 +238,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
                 if anyEntitySeen and self.hideCooldown <= 0 then
                     if self.state ~= "hiding" then
                         addEvent(self, "Hiding from entity")
+                        self.justStartedHiding = true   -- unease drop
                     end
                     self.state = "hiding"
                     self.vx = 0; self.vy = 0
@@ -254,6 +262,7 @@ function Denizen:update(dt, mapObj, entities, lightmap, unease, foods, exits, al
             if anyEntitySeen and self.hideCooldown <= 0 then
                 if self.state ~= "hiding" then
                     addEvent(self, "Hiding from entity")
+                    self.justStartedHiding = true   -- unease drop
                 end
                 self.state = "hiding"
                 self.vx = 0; self.vy = 0
